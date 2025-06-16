@@ -428,7 +428,7 @@ mod tests {
         #[test]
         fn test_eink_rendering() {
             let series = test_series();
-            let mut display = MockDisplay::<BinaryColor>::new();
+            let display = MockDisplay::<BinaryColor>::new();
 
             // This should not panic and should render something
             draw_eink(&series, display);
@@ -441,7 +441,7 @@ mod tests {
         fn test_eink_offline_indicator() {
             let mut series = test_series();
             series.offline = true;
-            let mut display = MockDisplay::<BinaryColor>::new();
+            let display = MockDisplay::<BinaryColor>::new();
 
             draw_eink(&series, display);
 
@@ -451,7 +451,7 @@ mod tests {
         #[test]
         fn test_eink_with_different_config() {
             // Create a temporary config file for testing
-            let test_config = r#"
+            let _test_config = r#"
 [station]
 id = "8443970"
 name = "Boston, MA"

@@ -51,9 +51,9 @@ pub use tide_clock_lib::{config::Config, Sample, TideSeries};
 #[cfg(target_os = "linux")]
 use embedded_hal::delay::DelayNs;
 #[cfg(target_os = "linux")]
-use epd_waveshare::{epd4in2::Epd4in2, prelude::*};
+use epd_waveshare::epd4in2::Epd4in2;
 #[cfg(target_os = "linux")]
-use linux_embedded_hal::{spidev::Spidev, Delay};
+use linux_embedded_hal::{Delay, Pin, Spidev};
 
 // Application dependencies
 use std::env;
@@ -125,7 +125,7 @@ fn main() -> anyhow::Result<()> {
 
         // Initialize e-ink display driver with GPIO pin configuration
         // Pin numbers correspond to BCM GPIO numbers (not physical pin numbers)
-        let mut epd = EPD4in2::new(
+        let mut epd = Epd4in2::new(
             &mut spi,     // SPI interface
             Pin::new(8),  // CS (Chip Select) - GPIO 8
             Pin::new(25), // DC (Data/Command) - GPIO 25
