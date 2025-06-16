@@ -26,11 +26,12 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Cache cargo registry
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
-          ~/.cargo/registry
-          ~/.cargo/git
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
           target
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
@@ -39,6 +40,12 @@ jobs:
     - name: Install Rust toolchain
       run: |
         rustup component add clippy rustfmt
+
+    - name: Set build optimizations
+      run: |
+        echo "CARGO_INCREMENTAL=1" >> $GITHUB_ENV
+        echo "CARGO_NET_RETRY=10" >> $GITHUB_ENV
+        echo "RUST_BACKTRACE=1" >> $GITHUB_ENV
 
     - name: Check formatting
       run: cargo fmt --all -- --check

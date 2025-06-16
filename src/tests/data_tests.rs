@@ -28,7 +28,7 @@ fn fallback_produces_sane_tide_range() {
     // Verify reasonable tidal range (2.5 to 7.5 feet based on model)
     let tidal_range = max_height - min_height;
     assert!(
-        tidal_range >= 4.0 && tidal_range <= 6.0,
+        (4.0..=6.0).contains(&tidal_range),
         "Tidal range {} is outside expected bounds (4.0-6.0 feet)",
         tidal_range
     );
@@ -192,7 +192,7 @@ fn interpolation_produces_smooth_curves() {
 
     // Should have multiple direction changes over 24 hours (high/low tides)
     assert!(
-        direction_changes >= 2 && direction_changes <= 8,
+        (2..=8).contains(&direction_changes),
         "Should have 2-8 direction changes over 24 hours, got {}",
         direction_changes
     );

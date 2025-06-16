@@ -84,12 +84,10 @@ fn format_tide_height(tide_ft_msl: f32) -> String {
         } else {
             format!("+{:.1}", tide_ft_msl)
         }
+    } else if tide_ft_msl.fract() == 0.0 {
+        format!("{:.0}", tide_ft_msl)
     } else {
-        if tide_ft_msl.fract() == 0.0 {
-            format!("{:.0}", tide_ft_msl)
-        } else {
-            format!("{:.1}", tide_ft_msl)
-        }
+        format!("{:.1}", tide_ft_msl)
     }
 }
 

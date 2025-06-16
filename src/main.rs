@@ -40,29 +40,26 @@
 //! - **Invalid data**: Validated during parsing, falls back gracefully
 //! - **Permission issues**: Clear error messages for debugging
 
-// Module declarations - organize code into logical units
-mod fallback;
-mod renderer;
-mod tide_data;
-
 // Test modules
 #[cfg(test)]
 mod tests;
 
 // Re-export library types for internal use
-pub use tide_clock_lib::*;
+pub use tide_clock_lib::{config::Config, Sample, TideSeries};
 
 // Hardware and graphics dependencies (only used in production mode on Linux)
 #[cfg(target_os = "linux")]
-use epd_waveshare::{epd4in2::EPD4in2, prelude::*};
+use embedded_hal::delay::DelayNs;
 #[cfg(target_os = "linux")]
-use linux_embedded_hal::{Delay, Pin, Spidev};
+use epd_waveshare::{epd4in2::Epd4in2, prelude::*};
+#[cfg(target_os = "linux")]
+use linux_embedded_hal::{spidev::Spidev, Delay};
 
 // Application dependencies
-use renderer::draw_ascii;
-#[cfg(target_os = "linux")]
-use renderer::draw_eink;
 use std::env;
+#[cfg(target_os = "linux")]
+use tide_clock_lib::renderer::draw_eink;
+use tide_clock_lib::{fallback, renderer::draw_ascii, tide_data};
 
 /// Main application entry point.
 ///
@@ -139,7 +136,7 @@ fn main() -> anyhow::Result<()> {
 
         // Create display buffer for rendering
         // This allocates the frame buffer for the 400×300 pixel display
-        let mut display = epd_waveshare::graphics::Display4in2::default();
+        let mut display = epd_waveshare::graphics::Display::default();
 
         // Render tide data to display buffer
         draw_eink(&tide_series, &mut display);
@@ -149,7 +146,7 @@ fn main() -> anyhow::Result<()> {
         epd.update_and_display_frame(&mut spi, display.buffer(), &mut delay)?;
 
         // Settle delay for 4.2" glass (1.5s is within Waveshare's 1-1.7s fast-refresh spec)
-        delay.delay_ms(1500u16);
+        delay.delay_ms(1500u32);
 
         // Put display into low-power sleep mode
         // Critical for battery-powered applications and longevity
@@ -159,8 +156,11 @@ fn main() -> anyhow::Result<()> {
     #[cfg(not(target_os = "linux"))]
     {
         eprintln!("Hardware mode is only available on Linux. Use --stdout for development mode.");
-        return Err(anyhow::anyhow!(
+        Err(anyhow::anyhow!(
             "Hardware mode not supported on this platform"
-        ));
+        ))
     }
+
+    #[cfg(target_os = "linux")]
+    Ok(())
 }

@@ -59,7 +59,7 @@ use thiserror::Error;
 pub enum TideError {
     /// HTTP request failed (network, server, or protocol error)
     #[error("HTTP error: {0}")]
-    Http(#[from] ureq::Error),
+    Http(Box<ureq::Error>),
 
     /// API parsing failed (unexpected JSON structure or missing data)
     #[error("API parse failed")]
@@ -68,6 +68,12 @@ pub enum TideError {
     /// Cache file operations failed (permissions, disk space, corruption)
     #[error("cache IO: {0}")]
     Cache(#[from] io::Error),
+}
+
+impl From<ureq::Error> for TideError {
+    fn from(error: ureq::Error) -> Self {
+        TideError::Http(Box::new(error))
+    }
 }
 
 /// Cache file location on filesystem
