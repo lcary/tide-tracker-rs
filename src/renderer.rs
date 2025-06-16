@@ -137,12 +137,10 @@ pub fn draw_eink<S: DrawTarget<Color = BinaryColor, Error = core::convert::Infal
 
         let label = if config.station.show_msl {
             format_tide_height(current_display)
+        } else if current_display.fract() == 0.0 {
+            format!("{:.0}", current_display)
         } else {
-            if current_display.fract() == 0.0 {
-                format!("{:.0}", current_display)
-            } else {
-                format!("{:.1}", current_display)
-            }
+            format!("{:.1}", current_display)
         };
 
         Text::new(&label, Point::new(2, y + 6), text_style)
@@ -433,10 +431,10 @@ mod tests {
             let mut display = MockDisplay::<BinaryColor>::new();
 
             // This should not panic and should render something
-            draw_eink(&series, &mut display);
+            draw_eink(&series, display);
 
             // Check that some pixels were drawn (tide curve should exist)
-            let pixels_drawn = display.into_iter().count();
+            let pixels_drawn = display.colored_pixels(BinaryColor::On).count();
             assert!(pixels_drawn > 0, "No pixels were drawn to the display");
         }
 
@@ -446,17 +444,15 @@ mod tests {
             series.offline = true;
             let mut display = MockDisplay::<BinaryColor>::new();
 
-            draw_eink(&series, &mut display);
+            draw_eink(&series, display);
 
             // Should still render without panicking
-            let pixels_drawn = display.into_iter().count();
+            let pixels_drawn = display.colored_pixels(BinaryColor::On).count();
             assert!(pixels_drawn > 0, "No pixels were drawn to the display");
         }
 
         #[test]
         fn test_eink_with_different_config() {
-            use std::env;
-
             // Create a temporary config file for testing
             let test_config = r#"
 [station]
@@ -477,9 +473,9 @@ font_height = 16
             let series = test_series();
             let mut display = MockDisplay::<BinaryColor>::new();
 
-            draw_eink(&series, &mut display);
+            draw_eink(&series, display);
 
-            let pixels_drawn = display.into_iter().count();
+            let pixels_drawn = display.colored_pixels(BinaryColor::On).count();
             assert!(pixels_drawn > 0, "Failed to render with different config");
         }
     }
