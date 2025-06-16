@@ -1,0 +1,45 @@
+[package]
+name = "tide-tracker"
+version = "0.1.0"
+edition = "2021"
+authors = ["Tide Tracker Team"]
+description = "A lean Rust tide tracker for Raspberry Pi Zero W with e-ink display"
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "tide-tracker"
+path = "src/main.rs"
+
+[lib]
+name = "tide_clock_lib"
+path = "src/lib.rs"
+
+[dependencies]
+embedded-graphics = "0.8"
+ureq = { version = "2.9", features = ["json"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+scraper = "0.18"
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Linux-only dependencies for actual hardware
+[target.'cfg(target_os = "linux")'.dependencies]
+epd-waveshare = "0.6"
+linux-embedded-hal = "0.4"
+
+[dev-dependencies]
+tempfile = "3.8"
+
+[profile.release]
+# Optimize for size and memory usage on Pi Zero W
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+# Fast compilation for development
+opt-level = 0
+debug = true
