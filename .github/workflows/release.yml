@@ -1,0 +1,145 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+    - name: Get version from tag
+      id: get_version
+      run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Tide Tracker v${{ steps.get_version.outputs.version }}
+        body: |
+          ## Tide Tracker v${{ steps.get_version.outputs.version }}
+
+          ### Features
+          - 🌊 Real-time tide predictions from NOAA API
+          - 📱 ASCII terminal output for development
+          - 🖥️ E-ink display support (Waveshare 4.2")
+          - ⚡ Memory efficient (<1MB RAM usage)
+          - 🏖️ Configurable for any NOAA tide station
+          - 📊 Choice between MLLW and MSL display modes
+
+          ### Download
+          Choose the appropriate binary for your platform:
+          - **Raspberry Pi Zero W**: `tide-tracker-armv7-unknown-linux-gnueabihf`
+          - **Raspberry Pi 4 (64-bit)**: `tide-tracker-aarch64-unknown-linux-gnu`
+          - **Linux x86_64**: `tide-tracker-x86_64-unknown-linux-gnu`
+
+          ### Installation
+          ```bash
+          # Download and make executable
+          chmod +x tide-tracker-*
+          sudo mv tide-tracker-* /usr/local/bin/tide-tracker
+
+          # Create config file
+          tide-tracker --help
+          ```
+
+          ### Configuration
+          Edit `tide-config.toml` to set your NOAA station:
+          ```toml
+          [station]
+          id = "8418150"        # Your NOAA station ID
+          name = "Portland, ME" # Station name
+          msl_offset = 4.9      # MSL offset (feet)
+          show_msl = false      # Show MLLW (true) or MSL (false)
+          ```
+
+          See the [README](https://github.com/${{ github.repository }}/blob/main/README.md) for complete setup instructions.
+        draft: false
+        prerelease: false
+
+  build-and-upload:
+    name: Build and Upload
+    needs: create-release
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            name: tide-tracker-linux-x86_64
+          - target: aarch64-unknown-linux-gnu
+            name: tide-tracker-linux-aarch64
+          - target: armv7-unknown-linux-gnueabihf
+            name: tide-tracker-linux-armv7
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+
+    - name: Install cross
+      run: cargo install cross --git https://github.com/cross-rs/cross
+
+    - name: Update version in Cargo.toml
+      run: |
+        sed -i 's/^version = ".*"/version = "${{ needs.create-release.outputs.version }}"/' Cargo.toml
+
+    - name: Build release binary
+      run: cross build --release --target ${{ matrix.target }}
+
+    - name: Strip binary and prepare for upload
+      run: |
+        cp target/${{ matrix.target }}/release/tide-tracker ${{ matrix.name }}
+        strip ${{ matrix.name }} || true
+        chmod +x ${{ matrix.name }}
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: ./${{ matrix.name }}
+        asset_name: ${{ matrix.name }}
+        asset_content_type: application/octet-stream
+
+  build-source:
+    name: Build Source Archive
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Update version in Cargo.toml
+      run: |
+        sed -i 's/^version = ".*"/version = "${{ needs.create-release.outputs.version }}"/' Cargo.toml
+
+    - name: Create source archive
+      run: |
+        tar --exclude='.git' --exclude='target' --exclude='.github' \
+            -czf tide-tracker-v${{ needs.create-release.outputs.version }}-source.tar.gz .
+
+    - name: Upload Source Archive
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create-release.outputs.upload_url }}
+        asset_path: ./tide-tracker-v${{ needs.create-release.outputs.version }}-source.tar.gz
+        asset_name: tide-tracker-v${{ needs.create-release.outputs.version }}-source.tar.gz
+        asset_content_type: application/gzip
