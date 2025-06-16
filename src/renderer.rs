@@ -5,14 +5,16 @@
 //! a convenient development mode for testing on desktop systems.
 
 use crate::{config::Config, TideSeries};
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "hardware"))]
 use embedded_graphics::{
     mono_font::{ascii::FONT_10X20, MonoTextStyle},
-    pixelcolor::BinaryColor,
     prelude::*,
     primitives::{Circle, Line, PrimitiveStyle},
     text::Text,
 };
+
+#[cfg(all(target_os = "linux", feature = "hardware"))]
+use epd_waveshare::color::Color;
 
 /// Convert tide height from MLLW (Mean Lower Low Water) to MSL (Mean Sea Level)
 /// using the configured offset for user-friendly display.
@@ -92,19 +94,27 @@ fn format_tide_height(tide_ft_msl: f32) -> String {
 }
 
 /// Render tide data to e-ink display.
-#[cfg(target_os = "linux")]
-pub fn draw_eink<S: DrawTarget<Color = BinaryColor, Error = core::convert::Infallible>>(
-    series: &TideSeries,
-    mut display: S,
-) {
+#[cfg(all(target_os = "linux", feature = "hardware"))]
+pub fn draw_eink(series: &TideSeries, display: &mut epd_waveshare::epd4in2::Display4in2) {
+    use embedded_graphics::mono_font::ascii::{FONT_10X20, FONT_6X10};
+    use embedded_graphics::{
+        draw_target::DrawTarget,
+        mono_font::{MonoTextStyle, MonoTextStyleBuilder},
+        prelude::*,
+        primitives::{Circle, Line, Primitive, PrimitiveStyle, Rectangle},
+        text::Text,
+    };
+    use epd_waveshare::color::Color;
+
     let config = Config::load();
 
     // Use configured display dimensions
-    let width = config.display.width;
-    let height = config.display.height;
+    let width = config.display.width as i32;
+    let height = config.display.height as i32;
 
     // Text style for labels and indicators
-    let text_style = MonoTextStyle::new(&FONT_10X20, BinaryColor::On);
+    let text_style = MonoTextStyle::new(&FONT_10X20, Color::Black);
+    let small_text_style = MonoTextStyle::new(&FONT_6X10, Color::Black);
 
     // Calculate tide range using configurable display mode
     let (min_display, max_display) = calculate_display_bounds(series, &config);
@@ -144,13 +154,13 @@ pub fn draw_eink<S: DrawTarget<Color = BinaryColor, Error = core::convert::Infal
         };
 
         Text::new(&label, Point::new(2, y + 6), text_style)
-            .draw(&mut display)
+            .draw(display)
             .ok();
 
         // Draw tick mark
         Line::new(Point::new(chart_left - 5, y), Point::new(chart_left, y))
-            .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 1))
-            .draw(&mut display)
+            .into_styled(PrimitiveStyle::with_stroke(Color::Black, 1))
+            .draw(display)
             .ok();
 
         current_display += tide_step;
@@ -158,27 +168,27 @@ pub fn draw_eink<S: DrawTarget<Color = BinaryColor, Error = core::convert::Infal
 
     // Draw time labels
     Text::new("-12h", Point::new(chart_left, height - 1), text_style)
-        .draw(&mut display)
+        .draw(display)
         .ok();
     Text::new(
         "Now",
         Point::new(chart_left + chart_width / 2 - 12, height - 1),
         text_style,
     )
-    .draw(&mut display)
+    .draw(display)
     .ok();
     Text::new(
         "+12h",
         Point::new(chart_left + chart_width - 36, height - 1),
         text_style,
     )
-    .draw(&mut display)
+    .draw(display)
     .ok();
 
     // Show offline indicator
     if series.offline {
         Text::new("⚠ OFFLINE", Point::new(width - 72, 0), text_style)
-            .draw(&mut display)
+            .draw(display)
             .ok();
     }
 
@@ -194,8 +204,8 @@ pub fn draw_eink<S: DrawTarget<Color = BinaryColor, Error = core::convert::Infal
 
         if let Some(prev_point) = previous_point {
             Line::new(prev_point, current_point)
-                .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 2))
-                .draw(&mut display)
+                .into_styled(PrimitiveStyle::with_stroke(Color::Black, 2))
+                .draw(display)
                 .ok();
         }
 
@@ -206,18 +216,18 @@ pub fn draw_eink<S: DrawTarget<Color = BinaryColor, Error = core::convert::Infal
             // Draw downward-pointing arrow/caret: ▼
             let arrow_top = y - 12;
             Line::new(Point::new(x - 6, arrow_top), Point::new(x, y - 2))
-                .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 2))
-                .draw(&mut display)
+                .into_styled(PrimitiveStyle::with_stroke(Color::Black, 2))
+                .draw(display)
                 .ok();
             Line::new(Point::new(x + 6, arrow_top), Point::new(x, y - 2))
-                .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 2))
-                .draw(&mut display)
+                .into_styled(PrimitiveStyle::with_stroke(Color::Black, 2))
+                .draw(display)
                 .ok();
 
             // Also draw a filled circle at the tide point
             Circle::new(current_point, 4)
-                .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
-                .draw(&mut display)
+                .into_styled(PrimitiveStyle::with_fill(Color::Black))
+                .draw(display)
                 .ok();
         }
     }
@@ -423,15 +433,16 @@ mod tests {
     #[cfg(target_os = "linux")]
     mod eink_tests {
         use super::*;
-        use embedded_graphics::{mock_display::MockDisplay, pixelcolor::BinaryColor};
+        use embedded_graphics::mock_display::MockDisplay;
+        use epd_waveshare::color::Color;
 
         #[test]
         fn test_eink_rendering() {
             let series = test_series();
-            let display = MockDisplay::<BinaryColor>::new();
+            let mut display = MockDisplay::<Color>::new();
 
             // This should not panic and should render something
-            draw_eink(&series, display);
+            draw_eink(&series, &mut display);
 
             // Basic verification that rendering completed successfully
             // The test passes if no panic occurred during draw_eink call
@@ -441,9 +452,9 @@ mod tests {
         fn test_eink_offline_indicator() {
             let mut series = test_series();
             series.offline = true;
-            let display = MockDisplay::<BinaryColor>::new();
+            let mut display = MockDisplay::<Color>::new();
 
-            draw_eink(&series, display);
+            draw_eink(&series, &mut display);
 
             // Test passes if rendering completed without panicking
         }
@@ -468,9 +479,9 @@ font_height = 16
             // Write to a temporary file and test (in a real implementation)
             // For now, just test that the function works with default config
             let series = test_series();
-            let mut display = MockDisplay::<BinaryColor>::new();
+            let mut display = MockDisplay::<Color>::new();
 
-            draw_eink(&series, display);
+            draw_eink(&series, &mut display);
 
             // Test passes if rendering completed without panicking
         }

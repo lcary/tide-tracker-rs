@@ -59,7 +59,7 @@ use thiserror::Error;
 pub enum TideError {
     /// HTTP request failed (network, server, or protocol error)
     #[error("HTTP error: {0}")]
-    Http(Box<ureq::Error>),
+    Http(#[from] reqwest::Error),
 
     /// API parsing failed (unexpected JSON structure or missing data)
     #[error("API parse failed")]
@@ -68,12 +68,6 @@ pub enum TideError {
     /// Cache file operations failed (permissions, disk space, corruption)
     #[error("cache IO: {0}")]
     Cache(#[from] io::Error),
-}
-
-impl From<ureq::Error> for TideError {
-    fn from(error: ureq::Error) -> Self {
-        TideError::Http(Box::new(error))
-    }
 }
 
 /// Cache file location on filesystem
@@ -120,7 +114,7 @@ const TTL: u64 = 1800; // 30 minutes
 ///     fallback::approximate()
 /// });
 /// ```
-pub fn fetch() -> Result<TideSeries, TideError> {
+pub async fn fetch() -> Result<TideSeries, TideError> {
     let config = Config::load();
 
     // Try cache first - much faster than network fetch
@@ -129,7 +123,7 @@ pub fn fetch() -> Result<TideSeries, TideError> {
     }
 
     // Cache miss or stale - fetch fresh data from NOAA
-    let series = scrape_noaa(&config)?;
+    let series = scrape_noaa(&config).await?;
 
     // Save for future requests (ignore cache write failures)
     let _ = save_cache(&series);
@@ -169,7 +163,7 @@ pub fn fetch() -> Result<TideSeries, TideError> {
 /// tide_height = h1 + (h2 - h1) * (t - t1) / (t2 - t1)
 /// ```
 /// This provides smooth 10-minute samples suitable for curve visualization.
-fn scrape_noaa(config: &Config) -> Result<TideSeries, TideError> {
+async fn scrape_noaa(config: &Config) -> Result<TideSeries, TideError> {
     // Calculate date range: yesterday to tomorrow (ensures we have enough data)
     let now = Local::now();
     let yesterday = now - Duration::days(1);
@@ -187,8 +181,12 @@ fn scrape_noaa(config: &Config) -> Result<TideSeries, TideError> {
         config.station.id, begin_date, end_date
     );
 
-    // Fetch JSON data from API
-    let response = ureq::get(&url).call()?.into_string()?;
+    // Fetch JSON data from API with rustls TLS backend
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()?;
+
+    let response = client.get(&url).send().await?.text().await?;
 
     // Parse JSON response
     let json: serde_json::Value = serde_json::from_str(&response).map_err(|_| TideError::Scrape)?;

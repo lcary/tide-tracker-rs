@@ -41,8 +41,7 @@ jobs:
 
           ### Download
           Choose the appropriate binary for your platform:
-          - **Raspberry Pi Zero W**: `tide-tracker-armv7-unknown-linux-gnueabihf`
-          - **Raspberry Pi 4 (64-bit)**: `tide-tracker-aarch64-unknown-linux-gnu`
+          - **Raspberry Pi (64-bit)**: `tide-tracker-aarch64-unknown-linux-gnu`
           - **Linux x86_64**: `tide-tracker-x86_64-unknown-linux-gnu`
 
           ### Installation
@@ -80,8 +79,6 @@ jobs:
             name: tide-tracker-linux-x86_64
           - target: aarch64-unknown-linux-gnu
             name: tide-tracker-linux-aarch64
-          - target: armv7-unknown-linux-gnueabihf
-            name: tide-tracker-linux-armv7
     steps:
     - name: Checkout code
       uses: actions/checkout@v4

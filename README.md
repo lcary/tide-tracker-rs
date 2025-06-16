@@ -12,11 +12,12 @@ A lean, memory-efficient tide tracking application for Raspberry Pi Zero W with 
 - **Robust caching** with 30-minute TTL to minimize network requests
 - **Systemd integration** for reliable scheduled updates
 
-## Hardware Requirements
+## Hardware Requirements (Optional)
 
-### Raspberry Pi Zero W
-- 512 MB RAM
-- Headless Linux (Raspberry Pi OS Lite recommended)
+### Raspberry Pi (64-bit)
+- Any modern Raspberry Pi (Pi 3, 4, 5, or Zero 2 W)
+- 1GB+ RAM recommended
+- Headless Linux (Raspberry Pi OS Lite recommended)  
 - SPI enabled (`sudo raspi-config` → Interface Options → SPI → Enable)
 
 ### Waveshare 4.2" E-ink Display
@@ -24,12 +25,51 @@ A lean, memory-efficient tide tracking application for Raspberry Pi Zero W with 
 - Monochrome (black/white)
 - SPI interface
 
+## Cross-Compilation
+
+The project successfully cross-compiles for ARM targets.
+### Building for Raspberry Pi (ARM64)
+
+#### Option 1: Using Docker (Recommended)
+```bash
+# Install cross if not already installed
+cargo install cross
+
+# Build for Raspberry Pi using Docker
+cross build --release --target=aarch64-unknown-linux-gnu
+
+# With hardware features (e-ink display)
+cross build --release --target=aarch64-unknown-linux-gnu --features hardware
+```
+
+#### Option 2: GitHub Actions CI
+The project includes GitHub Actions workflows that automatically build ARM64 binaries:
+- Push to main branch triggers ARM64 cross-compilation
+- Release tags automatically build and upload ARM64 binaries
+
+#### Option 3: Native ARM64 Toolchain
+```bash
+# On macOS with Homebrew
+brew install aarch64-linux-gnu-gcc
+
+# Build with custom linker
+cargo build --release --target=aarch64-unknown-linux-gnu
+```
+Final artifact: `target/aarch64-unknown-linux-gnu/release/tide-tracker`
+
+### Cross-Compilation Notes
+
+- **Code Status**: ✅ All Rust code compiles successfully for ARM64
+- **Dependencies**: ✅ Hardware-specific deps are properly conditional
+- **Platform Separation**: ✅ macOS/Linux incompatibilities resolved
+- **Linker**: Requires proper ARM64 toolchain or Docker (via `cross`)
+
 ## Wiring Diagram
 
-Connect the Waveshare 4.2" e-ink display to your Raspberry Pi Zero W:
+Connect the Waveshare 4.2" e-ink display to your Raspberry Pi:
 
 ```
-Pi Zero W GPIO    →    E-ink Display
+Raspberry Pi GPIO     →    E-ink Display
 ─────────────────────────────────────
 3.3V (Pin 1)      →    VCC
 GND (Pin 6)       →    GND
@@ -58,7 +98,17 @@ GPIO 24 (Pin 18)  →    BUSY
            [25] [26]
 ```
 
-## Installation & Setup
+## Installation & Setup (on macOS)
+
+### 1. Install Rust
+
+### 2. Build
+
+ - `rustup target add aarch64-unknown-linux-gnu`
+ - `cargo build --release --target=aarch64-unknown-linux-gnu`
+ - `scp target/aarch64-unknown-linux-gnu/release/tide-tracker pi@0.0.0.0:~`
+
+## Installation & Setup (on Pi)
 
 ### 1. Install Rust on Raspberry Pi
 ```bash
@@ -150,9 +200,9 @@ Group=root
 StandardOutput=journal
 StandardError=journal
 
-# Memory limits for Pi Zero W
-MemoryMax=2M
-MemoryHigh=1M
+# Memory limits for Raspberry Pi
+MemoryMax=4M
+MemoryHigh=2M
 
 # Security hardening
 NoNewPrivileges=true
@@ -204,7 +254,7 @@ The default configuration uses Boston Harbor (NOAA Station ID: 8410140). To chan
 - **Purpose**: Reduces network requests and improves reliability
 
 ### Memory Optimization
-The application is optimized for Pi Zero W's limited memory:
+The application is optimized for Raspberry Pi's memory:
 - Pre-allocated vectors with known capacity
 - Minimal string allocations
 - Efficient binary serialization

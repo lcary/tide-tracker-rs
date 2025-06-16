@@ -48,7 +48,7 @@ cargo build --release
 
 # Cross-compilation for Raspberry Pi
 cargo install cross
-cross build --target armv7-unknown-linux-gnueabihf --release
+cross build --target aarch64-unknown-linux-gnu --release
 ```
 
 ### Testing
