@@ -14,7 +14,7 @@ jobs:
     name: Test Suite
     runs-on: ubuntu-latest
     container:
-      image: rust:1.75-slim
+      image: rust:1.83-slim
     steps:
     - name: Install system dependencies
       run: |
