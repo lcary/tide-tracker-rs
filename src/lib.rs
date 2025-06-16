@@ -33,6 +33,12 @@
 
 use serde::{Deserialize, Serialize};
 
+// Module declarations
+pub mod config;
+pub mod fallback;
+pub mod renderer;
+pub mod tide_data;
+
 /// A single tide measurement at a specific time relative to "now".
 ///
 /// This structure is carefully sized for memory efficiency:

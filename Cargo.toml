@@ -23,6 +23,7 @@ scraper = "0.18"
 chrono = { version = "0.4", features = ["serde"] }
 thiserror = "1.0"
 anyhow = "1.0"
+toml = "0.8"
 
 # Linux-only dependencies for actual hardware
 [target.'cfg(target_os = "linux")'.dependencies]

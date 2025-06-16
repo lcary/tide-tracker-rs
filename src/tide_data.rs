@@ -8,7 +8,7 @@
 //!
 //! ### NOAA CO-OPS API
 //! - **URL**: https://api.tidesandcurrents.noaa.gov/api/prod/datagetter
-//! - **Station**: 8410140 (Boston Harbor, MA) - configurable by editing URL
+//! - **Station**: 8418150 (Portland, ME) - configurable by editing URL
 //! - **Format**: JSON response with 6-minute interval predictions
 //! - **Data**: 48 hours covering yesterday to tomorrow
 //!
@@ -45,7 +45,7 @@
 //!
 //! All errors propagate through `TideError` enum for consistent handling.
 
-use crate::{Sample, TideSeries};
+use crate::{config::Config, Sample, TideSeries};
 use chrono::{Duration, Local};
 use std::{fs, io, time::SystemTime};
 use thiserror::Error;
@@ -115,13 +115,15 @@ const TTL: u64 = 1800; // 30 minutes
 /// });
 /// ```
 pub fn fetch() -> Result<TideSeries, TideError> {
+    let config = Config::load();
+
     // Try cache first - much faster than network fetch
     if let Ok(series) = load_cache() {
         return Ok(series);
     }
 
     // Cache miss or stale - fetch fresh data from NOAA
-    let series = scrape_noaa()?;
+    let series = scrape_noaa(&config)?;
 
     // Save for future requests (ignore cache write failures)
     let _ = save_cache(&series);
@@ -141,7 +143,7 @@ pub fn fetch() -> Result<TideSeries, TideError> {
 ///
 /// # API Configuration
 /// Uses NOAA CO-OPS API v1 with the following parameters:
-/// - Station: 8410140 (Boston Harbor, MA)
+/// - Station: 8418150 (Portland, ME)
 /// - Product: predictions (tide predictions)
 /// - Datum: MLLW (Mean Lower Low Water)
 /// - Time zone: lst_ldt (Local Standard/Daylight Time)
@@ -149,19 +151,19 @@ pub fn fetch() -> Result<TideSeries, TideError> {
 /// - Format: json
 ///
 /// # Example API URL
-/// ```
+/// ```text
 /// https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?
-/// product=predictions&station=8410140&begin_date=20240616&end_date=20240617&
+/// product=predictions&station=8418150&begin_date=20240616&end_date=20240617&
 /// datum=MLLW&time_zone=lst_ldt&units=english&format=json
 /// ```
 ///
 /// # Interpolation Algorithm
 /// Linear interpolation between adjacent hourly points:
-/// ```
+/// ```text
 /// tide_height = h1 + (h2 - h1) * (t - t1) / (t2 - t1)
 /// ```
 /// This provides smooth 10-minute samples suitable for curve visualization.
-fn scrape_noaa() -> Result<TideSeries, TideError> {
+fn scrape_noaa(config: &Config) -> Result<TideSeries, TideError> {
     // Calculate date range: yesterday to tomorrow (ensures we have enough data)
     let now = Local::now();
     let yesterday = now - Duration::days(1);
@@ -171,12 +173,12 @@ fn scrape_noaa() -> Result<TideSeries, TideError> {
     let begin_date = yesterday.format("%Y%m%d").to_string();
     let end_date = tomorrow.format("%Y%m%d").to_string();
 
-    // NOAA CO-OPS API endpoint for Boston Harbor tide predictions
+    // NOAA CO-OPS API endpoint using configured station
     let url = format!(
         "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?\
-        product=predictions&station=8410140&begin_date={}&end_date={}&\
+        product=predictions&station={}&begin_date={}&end_date={}&\
         datum=MLLW&time_zone=lst_ldt&units=english&format=json",
-        begin_date, end_date
+        config.station.id, begin_date, end_date
     );
 
     // Fetch JSON data from API
