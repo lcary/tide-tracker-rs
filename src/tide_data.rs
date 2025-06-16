@@ -1,23 +1,24 @@
 //! # NOAA Tide Data Fetching and Caching
 //!
 //! This module handles all network operations for fetching real-time tide predictions
-//! from NOAA's Tides and Currents service. It includes intelligent caching to minimize
+//! from NOAA's Tides and Currents API. It includes intelligent caching to minimize
 //! network requests and robust error handling for unreliable network conditions.
 //!
 //! ## Data Source
 //!
-//! ### NOAA Tides and Currents
-//! - **URL**: https://tidesandcurrents.noaa.gov/noaatidepredictions.html
+//! ### NOAA CO-OPS API
+//! - **URL**: https://api.tidesandcurrents.noaa.gov/api/prod/datagetter
 //! - **Station**: 8410140 (Boston Harbor, MA) - configurable by editing URL
-//! - **Format**: HTML table with hourly predictions
-//! - **Data**: 25 hourly rows covering -12h to +12h from current time
+//! - **Format**: JSON response with 6-minute interval predictions
+//! - **Data**: 48 hours covering yesterday to tomorrow
 //!
 //! ### Data Processing Pipeline
-//! 1. **Fetch**: HTTP GET request to NOAA predictions page
-//! 2. **Parse**: Scrape HTML table using CSS selectors
-//! 3. **Interpolate**: Convert hourly data to 10-minute samples using linear interpolation
-//! 4. **Cache**: Store processed data with timestamp for 30-minute TTL
-//! 5. **Return**: 145 samples ready for visualization
+//! 1. **Fetch**: HTTP GET request to NOAA CO-OPS API
+//! 2. **Parse**: Deserialize JSON response containing tide predictions
+//! 3. **Filter**: Extract 24-hour window (-12h to +12h from current time)
+//! 4. **Interpolate**: Convert 6-minute data to 10-minute samples using linear interpolation
+//! 5. **Cache**: Store processed data with timestamp for 30-minute TTL
+//! 6. **Return**: 145 samples ready for visualization
 //!
 //! ## Caching Strategy
 //!
@@ -38,7 +39,7 @@
 //! The module handles multiple failure modes gracefully:
 //! - **Network timeouts**: HTTP client configured with reasonable timeouts
 //! - **Server errors**: 5xx responses handled as fetch failures
-//! - **Parse failures**: Malformed HTML or unexpected table structure
+//! - **Parse failures**: Malformed JSON or unexpected API response structure
 //! - **Cache corruption**: Invalid JSON falls back to fresh network fetch
 //! - **File system issues**: Permissions or disk space problems
 //!
@@ -46,7 +47,6 @@
 
 use crate::{Sample, TideSeries};
 use chrono::{Duration, Local};
-use scraper::{Html, Selector};
 use std::{fs, io, time::SystemTime};
 use thiserror::Error;
 
@@ -61,8 +61,8 @@ pub enum TideError {
     #[error("HTTP error: {0}")]
     Http(#[from] ureq::Error),
 
-    /// HTML parsing failed (unexpected page structure or missing data)
-    #[error("scrape failed")]
+    /// API parsing failed (unexpected JSON structure or missing data)
+    #[error("API parse failed")]
     Scrape,
 
     /// Cache file operations failed (permissions, disk space, corruption)
@@ -131,28 +131,28 @@ pub fn fetch() -> Result<TideSeries, TideError> {
 
 // -- Private Implementation --
 
-/// Scrape tide predictions from NOAA website and convert to TideSeries.
+/// Fetch tide predictions from NOAA API and convert to TideSeries.
 ///
-/// This function handles the complete pipeline from HTTP request to structured data:
-/// 1. Downloads HTML from NOAA predictions page
-/// 2. Parses the tide predictions table using CSS selectors
+/// This function uses NOAA's official CO-OPS API instead of HTML scraping:
+/// 1. Downloads JSON data from NOAA API
+/// 2. Parses the structured tide predictions
 /// 3. Converts hourly data points to 10-minute interpolated samples
 /// 4. Returns a complete 24-hour TideSeries
 ///
-/// # Network Configuration
-/// The HTTP client uses default timeouts (30s connect, 60s read) which are
-/// reasonable for Pi Zero W's potentially slow network connection.
+/// # API Configuration
+/// Uses NOAA CO-OPS API v1 with the following parameters:
+/// - Station: 8410140 (Boston Harbor, MA)
+/// - Product: predictions (tide predictions)
+/// - Datum: MLLW (Mean Lower Low Water)
+/// - Time zone: lst_ldt (Local Standard/Daylight Time)
+/// - Units: english (feet)
+/// - Format: json
 ///
-/// # HTML Parsing
-/// The scraper targets the specific table structure:
-/// ```html
-/// <table id="tide_predictions">
-///   <tbody>
-///     <tr><td>2024-06-16 12:00 AM</td><td>3.2</td>...</tr>
-///     <tr><td>2024-06-16 01:00 AM</td><td>2.8</td>...</tr>
-///     ...
-///   </tbody>
-/// </table>
+/// # Example API URL
+/// ```
+/// https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?
+/// product=predictions&station=8410140&begin_date=20240616&end_date=20240617&
+/// datum=MLLW&time_zone=lst_ldt&units=english&format=json
 /// ```
 ///
 /// # Interpolation Algorithm
@@ -162,43 +162,74 @@ pub fn fetch() -> Result<TideSeries, TideError> {
 /// ```
 /// This provides smooth 10-minute samples suitable for curve visualization.
 fn scrape_noaa() -> Result<TideSeries, TideError> {
-    // NOAA Boston Harbor tide predictions
-    // To change location: update station ID (8410140) in URL
-    let url = "https://tidesandcurrents.noaa.gov/noaatidepredictions.html?id=8410140";
+    // Calculate date range: yesterday to tomorrow (ensures we have enough data)
+    let now = Local::now();
+    let yesterday = now - Duration::days(1);
+    let tomorrow = now + Duration::days(1);
 
-    // Fetch HTML page (may take several seconds on Pi Zero W)
-    let html = ureq::get(url).call()?.into_string()?;
-    let doc = Html::parse_document(&html);
+    // Format dates for API (YYYYMMDD)
+    let begin_date = yesterday.format("%Y%m%d").to_string();
+    let end_date = tomorrow.format("%Y%m%d").to_string();
 
-    // Parse tide predictions table
-    let sel =
-        Selector::parse("table#tide_predictions tbody tr").expect("CSS selector should be valid");
+    // NOAA CO-OPS API endpoint for Boston Harbor tide predictions
+    let url = format!(
+        "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?\
+        product=predictions&station=8410140&begin_date={}&end_date={}&\
+        datum=MLLW&time_zone=lst_ldt&units=english&format=json",
+        begin_date, end_date
+    );
 
-    // Extract hourly data points covering -12h to +12h (25 total rows)
+    // Fetch JSON data from API
+    let response = ureq::get(&url).call()?.into_string()?;
+
+    // Parse JSON response
+    let json: serde_json::Value = serde_json::from_str(&response).map_err(|_| TideError::Scrape)?;
+
+    // Extract predictions array
+    let predictions = json["predictions"].as_array().ok_or(TideError::Scrape)?;
+
+    // Parse predictions into (datetime, height) pairs
     let mut hourly = Vec::<(chrono::DateTime<Local>, f32)>::new();
-    for row in doc.select(&sel).take(25) {
-        let txt: Vec<_> = row.text().collect();
+    for prediction in predictions {
+        let time_str = prediction["t"].as_str().ok_or(TideError::Scrape)?;
+        let height_str = prediction["v"].as_str().ok_or(TideError::Scrape)?;
 
-        // Parse datetime string (e.g., "2024-06-16 3:00 PM")
-        let dt = chrono::NaiveDateTime::parse_from_str(txt[0].trim(), "%Y-%m-%d %I:%M %p")
+        // Parse datetime (format: "2024-06-16 15:00")
+        let dt = chrono::NaiveDateTime::parse_from_str(time_str, "%Y-%m-%d %H:%M")
             .map_err(|_| TideError::Scrape)?
             .and_local_timezone(Local)
             .single()
             .ok_or(TideError::Scrape)?;
 
-        // Parse tide height (e.g., "3.2" feet)
-        let ft: f32 = txt[1].trim().parse().map_err(|_| TideError::Scrape)?;
+        // Parse tide height
+        let ft: f32 = height_str.parse().map_err(|_| TideError::Scrape)?;
 
         hourly.push((dt, ft));
     }
 
-    // Verify we got expected amount of data
-    if hourly.len() < 25 {
+    // Verify we got enough data (should have ~48 hours worth)
+    if hourly.len() < 24 {
+        return Err(TideError::Scrape);
+    }
+
+    // Sort by time to ensure chronological order
+    hourly.sort_by_key(|&(dt, _)| dt);
+
+    // Find data closest to our 24-hour window (-12h to +12h from now)
+    let start_time = now - Duration::hours(12);
+    let end_time = now + Duration::hours(12);
+
+    // Filter to our time window and ensure we have enough points
+    let filtered: Vec<_> = hourly
+        .into_iter()
+        .filter(|(dt, _)| *dt >= start_time && *dt <= end_time)
+        .collect();
+
+    if filtered.len() < 20 {
         return Err(TideError::Scrape);
     }
 
     // Interpolate hourly data to 10-minute grid
-    let now = Local::now();
     let start = now - Duration::hours(12);
     let mut samples = Vec::with_capacity(145);
 
@@ -207,14 +238,20 @@ fn scrape_noaa() -> Result<TideSeries, TideError> {
         let ts = start + Duration::minutes(step * 10);
 
         // Find the hourly interval containing this timestamp
-        let (p0, p1) = hourly
+        let (p0, p1) = filtered
             .windows(2)
             .find(|w| w[0].0 <= ts && ts <= w[1].0)
             .map(|w| (&w[0], &w[1]))
-            .unwrap_or((&hourly[0], &hourly[1]));
+            .unwrap_or((&filtered[0], &filtered[filtered.len() - 1]));
 
         // Linear interpolation: alpha = 0.0 at p0, 1.0 at p1
-        let alpha = (ts - p0.0).num_seconds() as f32 / (p1.0 - p0.0).num_seconds() as f32;
+        let duration_secs = (p1.0 - p0.0).num_seconds();
+        let alpha = if duration_secs > 0 {
+            (ts - p0.0).num_seconds() as f32 / duration_secs as f32
+        } else {
+            0.0
+        };
+        let alpha = alpha.clamp(0.0, 1.0);
         let ft = p0.1 + alpha * (p1.1 - p0.1);
 
         // Calculate minutes relative to "now" for display positioning
