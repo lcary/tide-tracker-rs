@@ -42,7 +42,7 @@ fn gpio_to_pin(gpio: u32) -> u32 {
 /// - The code automatically forces flag=1 for newer modules to prevent hanging
 #[cfg(all(target_os = "linux", feature = "hardware"))]
 fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow::Result<()> {
-    use tide_clock_lib::epd4in2b_v2::{Color, DisplayBuffer, Epd4in2bV2};
+    use tide_clock_lib::epd4in2b_v2::{DisplayBuffer, Epd4in2bV2};
 
     eprintln!("🚀 Initializing GPIO-only e-ink display (SPI disabled mode)...");
 
@@ -151,10 +151,10 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
         busy_pin_wrapper,
     );
 
-    // Force flag=1 for Waveshare 4.2" B rev2.2 modules (BUSY active HIGH)
-    // Comment this line out if you have an older module that needs flag=0
-    eprintln!("🔧 Forcing flag=1 for Waveshare 4.2\" B rev2.2 module (BUSY active HIGH)");
-    epd.set_flag(1);
+    // Force flag=0 for Waveshare 4.2" B rev2.2 modules (BUSY active HIGH)
+    // Comment this line out if you have an older module that needs flag=1
+    eprintln!("🔧 Forcing flag=0 for Waveshare 4.2\" B rev2.2 module (BUSY active HIGH)");
+    epd.set_flag(0);
 
     match epd.init() {
         Ok(_) => {
@@ -170,24 +170,31 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
         }
     }
 
-    eprintln!("🧹 Clearing display and rendering tide chart...");
+    eprintln!("🎨 Creating display buffer and rendering content...");
 
     // Create display buffer - 4.2" display is 400x300 pixels
     let mut display_buffer = DisplayBuffer::new(400, 300);
-    display_buffer.clear(Color::White);
+    // Buffer is already initialized to white by default - no need to clear again
 
-    // Render tide data to the display buffer
-    eprintln!("📊 Rendering tide data...");
-    render_tide_data_to_buffer(tide_series, &mut display_buffer);
+    // Choose rendering mode: true = test patterns, false = tide chart
+    let test_mode = false; // Set to false for simplified tide chart
 
-    // Add geometric test patterns to debug pixel mapping
-    eprintln!("🧪 Adding geometric test patterns...");
-    add_geometric_test_patterns(&mut display_buffer);
+    if test_mode {
+        eprintln!("🧪 TEST MODE: Adding geometric test patterns...");
+        add_geometric_test_patterns(&mut display_buffer);
+    } else {
+        eprintln!("📊 CHART MODE: Rendering tide chart...");
+        let renderer = tide_clock_lib::eink_renderer::EinkTideRenderer::new();
+        renderer.render_chart(&mut display_buffer, tide_series);
+    }
 
     eprintln!("📤 Updating e-ink display...");
+    eprintln!("     ⚠️  This should be called EXACTLY ONCE to avoid flickering");
 
     // Display the rendered data
     epd.display(display_buffer.black_buffer(), display_buffer.red_buffer())?;
+
+    eprintln!("     ✅ Display function completed - no more display calls will be made");
 
     // DON'T put display to sleep - keep the image visible
     // epd.sleep()?; // Commented out to keep image persistent
@@ -221,15 +228,15 @@ fn render_tide_data_to_buffer(
     eprintln!("✅ Tide chart rendering skipped - using test patterns only");
 }
 
-/// Add very simple test pattern to verify basic rendering
+/// Add a VERY simple test pattern for reliable debugging
 #[cfg(all(target_os = "linux", feature = "hardware"))]
 fn add_geometric_test_patterns(buffer: &mut tide_clock_lib::epd4in2b_v2::DisplayBuffer) {
     use tide_clock_lib::epd4in2b_v2::Color;
 
-    eprintln!("🎨 Adding VERY SIMPLE test pattern for basic verification...");
+    eprintln!("🎨 Adding SIMPLIFIED test pattern for debugging...");
 
-    // Just a simple 5px border - THAT'S IT!
-    eprintln!("   ⬛ Drawing simple 5px border...");
+    // Test 1: Thick 5px border around entire display - should be very visible
+    eprintln!("   ⬛ Drawing 5px black border...");
     for thickness in 0..5 {
         // Top and bottom borders
         for x in 0..400 {
@@ -243,7 +250,38 @@ fn add_geometric_test_patterns(buffer: &mut tide_clock_lib::epd4in2b_v2::Display
         }
     }
 
-    eprintln!("✅ Simple 5px border pattern added - should be clearly visible");
+    // Test 2: Large center cross - easy to see and debug coordinates
+    eprintln!("   ➕ Drawing large center cross...");
+    // Horizontal line across center
+    for x in 100..300 {
+        for thickness in 0..5 {
+            buffer.set_pixel(x, 150 + thickness - 2, Color::Black);
+        }
+    }
+    // Vertical line down center
+    for y in 75..225 {
+        for thickness in 0..5 {
+            buffer.set_pixel(200 + thickness - 2, y, Color::Black);
+        }
+    }
+
+    // Test 3: Four red corner dots - test color functionality
+    eprintln!("   🔴 Drawing red corner dots...");
+    for dy in 0..20 {
+        for dx in 0..20 {
+            // Larger corner dots for better visibility
+            buffer.set_pixel(30 + dx, 30 + dy, Color::Red); // Top-left (red)
+            buffer.set_pixel(350 + dx, 30 + dy, Color::Red); // Top-right (red)
+            buffer.set_pixel(30 + dx, 250 + dy, Color::Red); // Bottom-left (red)
+            buffer.set_pixel(350 + dx, 250 + dy, Color::Red); // Bottom-right (red)
+        }
+    }
+
+    eprintln!("✅ Simplified test pattern complete:");
+    eprintln!("     - 5px black border around entire display");
+    eprintln!("     - Large black cross in center");
+    eprintln!("     - Four 20x20 red dots in corners");
+    eprintln!("   If this doesn't show clearly, there's a pixel mapping issue");
 }
 
 /// Software SPI implementation using rppal GPIO bit-banging for e-ink displays

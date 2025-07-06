@@ -35,6 +35,8 @@ use serde::{Deserialize, Serialize};
 
 // Module declarations
 pub mod config;
+pub mod eink_renderer;
+pub mod epd4in2b_v2;
 pub mod fallback;
 pub mod renderer;
 pub mod tide_data;
@@ -109,6 +111,4 @@ pub struct TideSeries {
     pub offline: bool,
 }
 
-// Custom EPD module for hardware rendering
-#[cfg(all(target_os = "linux", feature = "hardware"))]
-pub mod epd4in2b_v2;
+// Custom EPD module for hardware rendering (already declared above)

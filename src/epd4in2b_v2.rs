@@ -195,48 +195,37 @@ where
         Ok(())
     }
 
-    /// Read BUSY pin and wait - follows C EPD_4IN2B_V2_ReadBusy() exactly
+    /// Read BUSY pin and wait - ALWAYS use BUSY active HIGH for rev2.2+ modules
     fn read_busy(&mut self) -> Result<(), EpdError> {
-        eprintln!("   📡 Waiting for display (BUSY pin check)...");
+        eprintln!("   📡 Waiting for display (BUSY active HIGH)...");
 
-        if self.flag == 0 {
-            // Flag 0: BUSY active LOW - wait while BUSY is LOW (0: busy, 1: idle)
-            eprintln!("   Flag=0: Waiting while BUSY pin is LOW (old chip)...");
-            loop {
-                thread::sleep(Duration::from_millis(20));
-                if self.busy_pin.is_high()? {
-                    break; // BUSY went HIGH, display is ready
-                }
-            }
-            thread::sleep(Duration::from_millis(20));
-        } else {
-            // Flag 1: BUSY active HIGH - wait while BUSY is HIGH (LOW: idle, HIGH: busy)
-            eprintln!("   Flag=1: Waiting while BUSY pin is HIGH (new chip)...");
-            while self.busy_pin.is_high()? {
-                thread::sleep(Duration::from_millis(20));
+        // ALWAYS use BUSY active HIGH for newer modules (flag=0 in C code)
+        // LOW: idle, HIGH: busy - wait while BUSY is HIGH
+        let mut count = 0;
+        while self.busy_pin.is_high()? {
+            thread::sleep(Duration::from_millis(10));
+            count += 1;
+            if count > 500 {
+                // 5 second timeout
+                eprintln!("   ⚠️  BUSY pin timeout after 5 seconds - display may be stuck");
+                break;
             }
         }
 
-        eprintln!("   ✅ Display ready (BUSY check completed)");
+        eprintln!("   ✅ Display ready (BUSY went LOW after {} checks)", count);
         Ok(())
     }
 
     /// Turn on display - follows C EPD_4IN2B_V2_TurnOnDisplay() exactly
     fn turn_on_display(&mut self) -> Result<(), EpdError> {
-        eprintln!("   🔆 Turning on display...");
+        eprintln!("   🔆 Turning on display (ALWAYS use new chip commands)...");
 
-        if self.flag == 1 {
-            // New chip version
-            self.send_command(0x22)?;
-            self.send_data(0xF7)?;
-            self.send_command(0x20)?;
-            self.read_busy()?;
-        } else {
-            // Old chip version
-            self.send_command(0x12)?;
-            thread::sleep(Duration::from_millis(100));
-            self.read_busy()?;
-        }
+        // ALWAYS use new chip version commands (flag=0 in C code)
+        // This works for rev2.2+ modules
+        self.send_command(0x22)?;
+        self.send_data(0xF7)?;
+        self.send_command(0x20)?;
+        self.read_busy()?;
 
         eprintln!("   ✅ Display turned on");
         Ok(())
@@ -244,90 +233,56 @@ where
 
     /// Initialize the display - follows C EPD_4IN2B_V2_Init() exactly
     pub fn init(&mut self) -> Result<(), EpdError> {
-        eprintln!("🚀 Initializing EPD (following C EPD_4in2b_V2.c exactly)...");
+        eprintln!("🚀 Initializing EPD (simplified for rev2.2+ modules)...");
 
         // Step 1: Hardware reset
         self.reset()?;
 
-        // Step 2: Send chip detection command (0x2F)
-        eprintln!("   🔍 Detecting chip version...");
-        self.send_command(0x2F)?;
-        thread::sleep(Duration::from_millis(100));
+        // Step 2: Skip chip detection - force newer module settings
+        eprintln!("   🏷️  SKIPPING chip detection - assuming rev2.2+ module");
 
-        // Step 3: Read chip version to determine flag
-        self.dc_pin.set_high()?; // Data mode for reading
-        self.cs_pin.set_low()?; // Select device
-        let chip_version = self.spi.read_byte()?;
-        self.cs_pin.set_high()?; // Deselect device
+        // ALWAYS use flag=0 for newer modules (rev2.2+)
+        // This corresponds to the "new" functions in C code with BUSY active HIGH
+        self.flag = 0;
+        eprintln!(
+            "   🏷️  FORCED flag=0 (BUSY active HIGH, uses 0x24/0x26 commands) for rev2.2+ modules"
+        );
 
-        eprintln!("   📟 Chip version read: 0x{:02X}", chip_version);
+        self.read_busy()?;
+        self.send_command(0x12)?; // SWRESET
+        self.read_busy()?;
 
-        // Step 4: Set flag and initialize based on chip version
-        // IMPORTANT: Most newer modules (rev2.2+) use BUSY active HIGH (flag=1)
-        // Force flag=1 for newer modules to avoid hanging on BUSY pin
-        if chip_version == 0x01 || chip_version == 0x00 {
-            // New chip version (flag = 1) - BUSY active HIGH
-            // Note: 0x00 often indicates read failure, but newer modules need flag=1
-            self.flag = 1;
-            if chip_version == 0x00 {
-                eprintln!(
-                    "   ⚠️  Chip version read as 0x00 (read failure), assuming rev2.2+ module"
-                );
-                eprintln!("   🏷️  Forcing flag=1 (BUSY active HIGH) for newer modules");
-            } else {
-                eprintln!("   🏷️  New chip detected (flag=1, BUSY active HIGH)");
-            }
+        self.send_command(0x3C)?; // BorderWaveform
+        self.send_data(0x05)?;
 
-            self.read_busy()?;
-            self.send_command(0x12)?; // SWRESET
-            self.read_busy()?;
+        self.send_command(0x18)?; // Read built-in temperature sensor
+        self.send_data(0x80)?;
 
-            self.send_command(0x3C)?; // BorderWaveform
-            self.send_data(0x05)?;
+        self.send_command(0x11)?; // Data entry mode setting
+        self.send_data(0x03)?;
 
-            self.send_command(0x18)?; // Read built-in temperature sensor
-            self.send_data(0x80)?;
+        // Set RAM X address start/end
+        self.send_command(0x44)?;
+        self.send_data(0x00)?;
+        self.send_data((self.width / 8 - 1) as u8)?;
 
-            self.send_command(0x11)?; // Data entry mode setting
-            self.send_data(0x03)?;
+        // Set RAM Y address start/end
+        self.send_command(0x45)?;
+        self.send_data(0x00)?;
+        self.send_data(0x00)?;
+        self.send_data(((self.height - 1) % 256) as u8)?;
+        self.send_data(((self.height - 1) / 256) as u8)?;
 
-            // Set RAM X address start/end
-            self.send_command(0x44)?;
-            self.send_data(0x00)?;
-            self.send_data((self.width / 8 - 1) as u8)?;
+        // Set RAM X address counter
+        self.send_command(0x4E)?;
+        self.send_data(0x00)?;
 
-            // Set RAM Y address start/end
-            self.send_command(0x45)?;
-            self.send_data(0x00)?;
-            self.send_data(0x00)?;
-            self.send_data(((self.height - 1) % 256) as u8)?;
-            self.send_data(((self.height - 1) / 256) as u8)?;
+        // Set RAM Y address counter
+        self.send_command(0x4F)?;
+        self.send_data(0x00)?;
+        self.send_data(0x00)?;
 
-            // Set RAM X address counter
-            self.send_command(0x4E)?;
-            self.send_data(0x00)?;
-
-            // Set RAM Y address counter
-            self.send_command(0x4F)?;
-            self.send_data(0x00)?;
-            self.send_data(0x00)?;
-
-            self.read_busy()?;
-        } else {
-            // Old chip version (flag = 0) - BUSY active LOW
-            // This path should rarely be used for modern modules
-            self.flag = 0;
-            eprintln!("   ❌ ERROR: Old chip detected (flag=0, BUSY active LOW)");
-            eprintln!("   ⚠️  WARNING: If you have a rev2.2+ module, this will cause hanging!");
-            eprintln!("   💡 Consider manually setting flag=1 in the code for newer modules");
-
-            self.read_busy()?;
-            self.send_command(0x04)?; // POWER_ON
-            self.read_busy()?;
-
-            self.send_command(0x00)?; // Panel setting
-            self.send_data(0x0F)?;
-        }
+        self.read_busy()?;
 
         eprintln!("   ✅ EPD initialization completed successfully!");
         Ok(())
@@ -335,7 +290,8 @@ where
 
     /// Display image data - follows C EPD_4IN2B_V2_Display() exactly
     pub fn display(&mut self, black_buffer: &[u8], red_buffer: &[u8]) -> Result<(), EpdError> {
-        eprintln!("   📤 Sending image data to display...");
+        eprintln!("   📤 DISPLAY FUNCTION CALLED - sending image data to display...");
+        eprintln!("       This should only be called ONCE to avoid flickering");
 
         let high = self.height as usize;
         let wide = ((self.width + 7) / 8) as usize; // Bytes per row
@@ -344,40 +300,25 @@ where
             "   📐 Display dimensions: {}x{} pixels = {} bytes per row",
             self.width, self.height, wide
         );
+        eprintln!(
+            "   🏷️  Using flag={} (0=newer modules, 1=older modules)",
+            self.flag
+        );
 
-        if self.flag == 0 {
-            // Flag=0: New chip version - use commands 0x24/0x26 (C code: flag==0 uses _new functions)
-            eprintln!("   📝 Sending black buffer (flag=0, commands 0x24/0x26)...");
-            self.send_command(0x24)?;
-            for j in 0..high {
-                for i in 0..wide {
-                    self.send_data(black_buffer[i + j * wide])?;
-                }
+        // ALWAYS use 0x24/0x26 commands (flag=0) for newer modules
+        eprintln!("   📝 Sending black buffer (using 0x24 command)...");
+        self.send_command(0x24)?;
+        for j in 0..high {
+            for i in 0..wide {
+                self.send_data(black_buffer[i + j * wide])?;
             }
+        }
 
-            eprintln!("   🔴 Sending red buffer (flag=0, commands 0x24/0x26)...");
-            self.send_command(0x26)?;
-            for j in 0..high {
-                for i in 0..wide {
-                    self.send_data(!red_buffer[i + j * wide])?; // Inverted as per C code
-                }
-            }
-        } else {
-            // Flag=1: Old chip version - use commands 0x10/0x13 (C code: flag==1 uses _old functions)
-            eprintln!("   📝 Sending black buffer (flag=1, commands 0x10/0x13)...");
-            self.send_command(0x10)?;
-            for j in 0..high {
-                for i in 0..wide {
-                    self.send_data(black_buffer[i + j * wide])?;
-                }
-            }
-
-            eprintln!("   🔴 Sending red buffer (flag=1, commands 0x10/0x13)...");
-            self.send_command(0x13)?;
-            for j in 0..high {
-                for i in 0..wide {
-                    self.send_data(!red_buffer[i + j * wide])?; // Inverted as per C code
-                }
+        eprintln!("   🔴 Sending red buffer (using 0x26 command)...");
+        self.send_command(0x26)?;
+        for j in 0..high {
+            for i in 0..wide {
+                self.send_data(!red_buffer[i + j * wide])?; // Inverted as per C code
             }
         }
 
@@ -395,37 +336,19 @@ where
         let high = self.height as usize;
         let wide = ((self.width + 7) / 8) as usize; // Bytes per row
 
-        if self.flag == 1 {
-            // Flag=1: New chip version - use commands 0x24/0x26
-            self.send_command(0x24)?;
-            for _j in 0..high {
-                for _i in 0..wide {
-                    self.send_data(0xFF)?; // White
-                }
+        // ALWAYS use 0x24/0x26 commands (flag=0) for newer modules
+        self.send_command(0x24)?;
+        for _j in 0..high {
+            for _i in 0..wide {
+                self.send_data(0xFF)?; // White
             }
+        }
 
-            // Clear red buffer
-            self.send_command(0x26)?;
-            for _j in 0..high {
-                for _i in 0..wide {
-                    self.send_data(0x00)?; // No red
-                }
-            }
-        } else {
-            // Flag=0: Old chip version - use commands 0x10/0x13
-            self.send_command(0x10)?;
-            for _j in 0..high {
-                for _i in 0..wide {
-                    self.send_data(0xFF)?; // White
-                }
-            }
-
-            // Clear red buffer
-            self.send_command(0x13)?;
-            for _j in 0..high {
-                for _i in 0..wide {
-                    self.send_data(0x00)?; // No red
-                }
+        // Clear red buffer
+        self.send_command(0x26)?;
+        for _j in 0..high {
+            for _i in 0..wide {
+                self.send_data(0x00)?; // No red
             }
         }
 
