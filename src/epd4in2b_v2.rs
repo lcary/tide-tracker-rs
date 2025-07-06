@@ -195,18 +195,17 @@ where
         Ok(())
     }
 
-    /// Read BUSY pin and wait - ALWAYS use BUSY active HIGH for rev2.2+ modules
+    /// Read BUSY pin and wait - simplified for rev2.2+ modules (matches static fuzz commit)
     fn read_busy(&mut self) -> Result<(), EpdError> {
-        eprintln!("   📡 Waiting for display (BUSY active HIGH)...");
+        eprintln!("   📡 Waiting for display (BUSY pin check)...");
 
-        // ALWAYS use BUSY active HIGH for newer modules (flag=0 in C code)
-        // LOW: idle, HIGH: busy - wait while BUSY is HIGH
         let mut count = 0;
+
+        // Simplified logic - just wait while BUSY pin is HIGH (matches static fuzz commit)
         while self.busy_pin.is_high()? {
             thread::sleep(Duration::from_millis(10));
             count += 1;
             if count > 500 {
-                // 5 second timeout
                 eprintln!("   ⚠️  BUSY pin timeout after 5 seconds - display may be stuck");
                 break;
             }
@@ -216,73 +215,122 @@ where
         Ok(())
     }
 
-    /// Turn on display - follows C EPD_4IN2B_V2_TurnOnDisplay() exactly
+    /// Turn on display - try both approaches for persistence
     fn turn_on_display(&mut self) -> Result<(), EpdError> {
-        eprintln!("   🔆 Turning on display (ALWAYS use new chip commands)...");
+        eprintln!(
+            "   🔆 Turning on display (trying flag={} approach)...",
+            self.flag
+        );
 
-        // ALWAYS use new chip version commands (flag=0 in C code)
-        // This works for rev2.2+ modules
-        self.send_command(0x22)?;
-        self.send_data(0xF7)?;
-        self.send_command(0x20)?;
+        if self.flag == 0 {
+            // Approach 1: flag=0 with newer chip commands
+            eprintln!("       📤 Flag=0: Sending 0x22/0xF7/0x20 sequence...");
+            self.send_command(0x22)?;
+            self.send_data(0xF7)?;
+            self.send_command(0x20)?;
+        } else {
+            // Approach 2: flag=1 with simpler command (might be needed for persistence)
+            eprintln!("       📤 Flag=1: Sending 0x12 command...");
+            self.send_command(0x12)?;
+            // Add a small delay for flag=1 as per some C examples
+            thread::sleep(Duration::from_millis(100));
+        }
+
+        eprintln!("       📡 Waiting for BUSY pin...");
         self.read_busy()?;
 
-        eprintln!("   ✅ Display turned on");
+        eprintln!(
+            "   ✅ Display turned on - flag={} commands sent successfully",
+            self.flag
+        );
         Ok(())
     }
 
-    /// Initialize the display - follows C EPD_4IN2B_V2_Init() exactly
+    /// Initialize the display - try both flag approaches for persistence
     pub fn init(&mut self) -> Result<(), EpdError> {
-        eprintln!("🚀 Initializing EPD (simplified for rev2.2+ modules)...");
+        eprintln!("🚀 Initializing EPD (trying both flag approaches)...");
 
         // Step 1: Hardware reset
         self.reset()?;
 
-        // Step 2: Skip chip detection - force newer module settings
-        eprintln!("   🏷️  SKIPPING chip detection - assuming rev2.2+ module");
+        // Step 2: Use the flag set by the caller and adapt init sequence accordingly
+        eprintln!("   🏷️  Using caller-specified flag={}", self.flag);
 
-        // ALWAYS use flag=0 for newer modules (rev2.2+)
-        // This corresponds to the "new" functions in C code with BUSY active HIGH
-        self.flag = 0;
-        eprintln!(
-            "   🏷️  FORCED flag=0 (BUSY active HIGH, uses 0x24/0x26 commands) for rev2.2+ modules"
-        );
+        if self.flag == 0 {
+            // Approach 1: flag=0 with newer module commands
+            eprintln!("   🏷️  Flag=0: Using newer module init (0x24/0x26 commands)");
 
-        self.read_busy()?;
-        self.send_command(0x12)?; // SWRESET
-        self.read_busy()?;
+            self.read_busy()?;
+            self.send_command(0x12)?; // SWRESET
+            self.read_busy()?;
 
-        self.send_command(0x3C)?; // BorderWaveform
-        self.send_data(0x05)?;
+            self.send_command(0x3C)?; // BorderWaveform
+            self.send_data(0x05)?;
 
-        self.send_command(0x18)?; // Read built-in temperature sensor
-        self.send_data(0x80)?;
+            self.send_command(0x18)?; // Read built-in temperature sensor
+            self.send_data(0x80)?;
 
-        self.send_command(0x11)?; // Data entry mode setting
-        self.send_data(0x03)?;
+            self.send_command(0x11)?; // Data entry mode setting
+            self.send_data(0x03)?;
 
-        // Set RAM X address start/end
-        self.send_command(0x44)?;
-        self.send_data(0x00)?;
-        self.send_data((self.width / 8 - 1) as u8)?;
+            // Set RAM X address start/end
+            self.send_command(0x44)?;
+            self.send_data(0x00)?;
+            self.send_data((self.width / 8 - 1) as u8)?;
 
-        // Set RAM Y address start/end
-        self.send_command(0x45)?;
-        self.send_data(0x00)?;
-        self.send_data(0x00)?;
-        self.send_data(((self.height - 1) % 256) as u8)?;
-        self.send_data(((self.height - 1) / 256) as u8)?;
+            // Set RAM Y address start/end
+            self.send_command(0x45)?;
+            self.send_data(0x00)?;
+            self.send_data(0x00)?;
+            self.send_data(((self.height - 1) % 256) as u8)?;
+            self.send_data(((self.height - 1) / 256) as u8)?;
 
-        // Set RAM X address counter
-        self.send_command(0x4E)?;
-        self.send_data(0x00)?;
+            // Set RAM X address counter
+            self.send_command(0x4E)?;
+            self.send_data(0x00)?;
 
-        // Set RAM Y address counter
-        self.send_command(0x4F)?;
-        self.send_data(0x00)?;
-        self.send_data(0x00)?;
+            // Set RAM Y address counter
+            self.send_command(0x4F)?;
+            self.send_data(0x00)?;
+            self.send_data(0x00)?;
 
-        self.read_busy()?;
+            self.read_busy()?;
+        } else {
+            // Approach 2: flag=1 with older/alternative module commands (for persistence testing)
+            eprintln!("   🏷️  Flag=1: Using alternative init (0x10/0x13 commands) for persistence");
+
+            self.read_busy()?;
+            self.send_command(0x04)?; // Power on
+            self.read_busy()?;
+
+            self.send_command(0x00)?; // Panel setting
+            self.send_data(0x0F)?;
+
+            // Still need basic memory addressing setup
+            self.send_command(0x11)?; // Data entry mode setting
+            self.send_data(0x03)?;
+
+            // Set RAM X address start/end
+            self.send_command(0x44)?;
+            self.send_data(0x00)?;
+            self.send_data((self.width / 8 - 1) as u8)?;
+
+            // Set RAM Y address start/end
+            self.send_command(0x45)?;
+            self.send_data(0x00)?;
+            self.send_data(0x00)?;
+            self.send_data(((self.height - 1) % 256) as u8)?;
+            self.send_data(((self.height - 1) / 256) as u8)?;
+
+            // Set RAM X address counter
+            self.send_command(0x4E)?;
+            self.send_data(0x00)?;
+
+            // Set RAM Y address counter
+            self.send_command(0x4F)?;
+            self.send_data(0x00)?;
+            self.send_data(0x00)?;
+        }
 
         eprintln!("   ✅ EPD initialization completed successfully!");
         Ok(())
@@ -301,31 +349,56 @@ where
             self.width, self.height, wide
         );
         eprintln!(
-            "   🏷️  Using flag={} (0=newer modules, 1=older modules)",
+            "   🏷️  Using flag={} - ALWAYS use 0x24/0x26 commands for newer modules",
             self.flag
         );
 
-        // ALWAYS use 0x24/0x26 commands (flag=0) for newer modules
-        eprintln!("   📝 Sending black buffer (using 0x24 command)...");
-        self.send_command(0x24)?;
-        for j in 0..high {
-            for i in 0..wide {
-                self.send_data(black_buffer[i + j * wide])?;
+        // Use commands based on flag - try both approaches to see which works for persistence
+        if self.flag == 0 {
+            // Approach 1: flag=0 with 0x24/0x26 commands
+            eprintln!("   📝 Sending black buffer (flag=0, using 0x24 command)...");
+            self.send_command(0x24)?;
+            for j in 0..high {
+                for i in 0..wide {
+                    self.send_data(black_buffer[i + j * wide])?;
+                }
             }
-        }
 
-        eprintln!("   🔴 Sending red buffer (using 0x26 command)...");
-        self.send_command(0x26)?;
-        for j in 0..high {
-            for i in 0..wide {
-                self.send_data(!red_buffer[i + j * wide])?; // Inverted as per C code
+            eprintln!("   🔴 Sending red buffer (flag=0, using 0x26 command)...");
+            self.send_command(0x26)?;
+            for j in 0..high {
+                for i in 0..wide {
+                    self.send_data(!red_buffer[i + j * wide])?; // Inverted as per C code
+                }
+            }
+        } else {
+            // Approach 2: flag=1 with 0x10/0x13 commands (might be needed for persistence)
+            eprintln!(
+                "   📝 Sending black buffer (flag=1, using 0x10 command - for persistence)..."
+            );
+            self.send_command(0x10)?;
+            for j in 0..high {
+                for i in 0..wide {
+                    self.send_data(black_buffer[i + j * wide])?;
+                }
+            }
+
+            eprintln!("   🔴 Sending red buffer (flag=1, using 0x13 command - for persistence)...");
+            self.send_command(0x13)?;
+            for j in 0..high {
+                for i in 0..wide {
+                    self.send_data(!red_buffer[i + j * wide])?; // Inverted as per C code
+                }
             }
         }
 
         // Turn on display to show the new image
+        eprintln!("   🔆 About to call turn_on_display() - this should make image visible");
         self.turn_on_display()?;
+        eprintln!("   🔆 turn_on_display() completed - image should now be visible and persistent");
 
         eprintln!("   ✅ Image data sent and display updated");
+
         Ok(())
     }
 
@@ -344,7 +417,6 @@ where
             }
         }
 
-        // Clear red buffer
         self.send_command(0x26)?;
         for _j in 0..high {
             for _i in 0..wide {
@@ -354,6 +426,9 @@ where
 
         self.turn_on_display()?;
 
+        // Wait for display refresh to complete
+        self.read_busy()?;
+
         eprintln!("   ✅ Display cleared");
         Ok(())
     }
@@ -362,12 +437,12 @@ where
     pub fn sleep(&mut self) -> Result<(), EpdError> {
         eprintln!("   😴 Putting display to sleep...");
 
-        if self.flag == 1 {
-            // New chip version
+        if self.flag == 0 {
+            // Newer modules (rev2.2+) - flag=0
             self.send_command(0x10)?; // Deep sleep mode
             self.send_data(0x03)?;
         } else {
-            // Old chip version
+            // Older modules - flag=1
             self.send_command(0x50)?; // VCOM and data interval setting
             self.send_data(0xF7)?;
 
