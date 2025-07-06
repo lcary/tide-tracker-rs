@@ -192,12 +192,13 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
     // DON'T put display to sleep - keep the image visible
     // epd.sleep()?; // Commented out to keep image persistent
 
-    eprintln!("✅ E-ink display updated successfully (image should persist)");
-
-    // Keep the program running to prevent any automatic cleanup that might clear the display
-    eprintln!("🕐 Keeping program running for 30 seconds to ensure image persistence...");
-    std::thread::sleep(std::time::Duration::from_secs(30));
-    eprintln!("   Program completed - image should remain on display");
+    eprintln!("✅ E-ink display updated successfully (image should persist)"); // Keep the program running to prevent any automatic cleanup that might clear the display
+    eprintln!("🕐 Keeping program running for 60 seconds to ensure image persistence...");
+    eprintln!("   This allows time to observe if the image blinks, fades, or disappears");
+    eprintln!("   Press Ctrl+C to exit early");
+    std::thread::sleep(std::time::Duration::from_secs(60));
+    eprintln!("   Program completed - image should remain on display indefinitely");
+    eprintln!("   E-ink displays retain images without power");
 
     Ok(())
 }
@@ -220,16 +221,16 @@ fn render_tide_data_to_buffer(
     eprintln!("✅ Tide chart rendering skipped - using test patterns only");
 }
 
-/// Add geometric test patterns to verify pixel mapping and rendering
+/// Add very simple test pattern to verify basic rendering
 #[cfg(all(target_os = "linux", feature = "hardware"))]
 fn add_geometric_test_patterns(buffer: &mut tide_clock_lib::epd4in2b_v2::DisplayBuffer) {
     use tide_clock_lib::epd4in2b_v2::Color;
 
-    eprintln!("🎨 Adding SIMPLIFIED geometric test patterns for pixel verification...");
+    eprintln!("🎨 Adding VERY SIMPLE test pattern for basic verification...");
 
-    // 1. Thick border (10px wide) - very visible
-    eprintln!("   � Drawing thick border (10px wide)...");
-    for thickness in 0..10 {
+    // Just a simple 5px border - THAT'S IT!
+    eprintln!("   ⬛ Drawing simple 5px border...");
+    for thickness in 0..5 {
         // Top and bottom borders
         for x in 0..400 {
             buffer.set_pixel(x, thickness, Color::Black); // Top border
@@ -242,26 +243,7 @@ fn add_geometric_test_patterns(buffer: &mut tide_clock_lib::epd4in2b_v2::Display
         }
     }
 
-    // 2. Large center square - easy to see
-    eprintln!("   ⬛ Drawing large center square...");
-    for x in 150..250 {
-        for y in 100..200 {
-            buffer.set_pixel(x, y, Color::Black);
-        }
-    }
-
-    // 3. Four corner squares (20x20 each) - very visible
-    eprintln!("   � Drawing large corner squares...");
-    for dy in 0..20 {
-        for dx in 0..20 {
-            buffer.set_pixel(dx, dy, Color::Red); // Top-left (red)
-            buffer.set_pixel(380 + dx, dy, Color::Red); // Top-right (red)
-            buffer.set_pixel(dx, 280 + dy, Color::Red); // Bottom-left (red)
-            buffer.set_pixel(380 + dx, 280 + dy, Color::Red); // Bottom-right (red)
-        }
-    }
-
-    eprintln!("✅ Simplified test patterns added - should see thick border, center square, and corner squares");
+    eprintln!("✅ Simple 5px border pattern added - should be clearly visible");
 }
 
 /// Software SPI implementation using rppal GPIO bit-banging for e-ink displays
