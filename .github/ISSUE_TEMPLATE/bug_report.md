@@ -24,7 +24,7 @@ If applicable, add screenshots or copy/paste terminal output to help explain you
 
 **Environment (please complete the following information):**
  - OS: [e.g. Raspberry Pi OS, Ubuntu 22.04]
- - Hardware: [e.g. Raspberry Pi Zero W, Raspberry Pi 4]
+ - Hardware: [e.g. Raspberry Pi Zero 2 W, Raspberry Pi 4]
  - Tide Tracker Version: [e.g. 1.0.0]
  - NOAA Station ID: [e.g. 8418150]
 

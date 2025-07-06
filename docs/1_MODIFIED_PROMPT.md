@@ -10,7 +10,7 @@ Only after the plan, create the complete project tree and populate all file cont
 ### 🏁 GOAL
 Create a lean, documented **tide-tracker** app that runs on:
 
-* Raspberry Pi Zero W (512 MB RAM, headless Linux)
+* Raspberry Pi Zero 2 W (512 MB RAM, headless Linux)
 * Waveshare 2.13″ 212 × 104 monochrome e-ink (SPI)
 
 ### ✅ FUNCTIONAL SPECS
@@ -246,7 +246,7 @@ use tide_clock::{fallback::approximate};
 1. **Echo this repo unchanged** so I can copy-paste it and compile right away.
 2. **Add rich module-level rustdoc** explaining design choices (memory, refresh, fallback).
 3. Produce a **`README.md`** with:
-   * Hardware wiring diagram (SPI pins → Pi Zero W).
+   * Hardware wiring diagram (SPI pins → Pi Zero 2 W).
    * Build & run instructions (`cargo run --release` vs `--stdout`).
    * Example `systemd.service` + `.timer`.
 4. Extend the **unit-test suite** (edge cases, cache staleness, interpolation monotonicity).

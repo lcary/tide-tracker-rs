@@ -5,7 +5,7 @@ Author: gpt-4o
 ## 🧭 Project Requirements
 
 **Goal:**
-Create a minimal, low-memory **tide chart display** that runs on a **Raspberry Pi Zero W** with an **e-ink screen**, rendering a simple 24-hour tide chart showing:
+Create a minimal, low-memory **tide chart display** that runs on a **Raspberry Pi Zero 2 W** with an **e-ink screen**, rendering a simple 24-hour tide chart showing:
 
 * The last 12 hours (historical tide)
 * The next 12 hours (predicted tide)
@@ -16,7 +16,7 @@ Create a minimal, low-memory **tide chart display** that runs on a **Raspberry P
 
 ## 🛠️ Hardware Target
 
-* **Device:** Raspberry Pi Zero W (512MB RAM, headless, Linux-based)
+* **Device:** Raspberry Pi Zero 2 W (512MB RAM, headless, Linux-based)
 * **Display:** Waveshare 2.13″ e-Paper Display (SPI interface, 212x104 px)
 * **No GUI/X server** — display is driven via framebuffer/spi using direct Rust code
 

@@ -3,16 +3,18 @@ name = "tide-tracker"
 version = "0.1.0"
 edition = "2021"
 authors = ["Tide Tracker Team"]
-description = "A lean Rust tide tracker for Raspberry Pi Zero W with e-ink display"
+description = "A lean Rust tide tracker for Raspberry Pi Zero 2 W with e-ink display"
 license = "MIT OR Apache-2.0"
 
 [features]
 default = []
-hardware = ["epd-waveshare", "linux-embedded-hal", "embedded-hal", "embedded-hal-bus"]
+hardware = ["embedded-hal", "embedded-hal-bus", "rppal"]
 
 [[bin]]
 name = "tide-tracker"
 path = "src/main.rs"
+
+
 
 [lib]
 name = "tide_clock_lib"
@@ -20,6 +22,7 @@ path = "src/lib.rs"
 
 [dependencies]
 embedded-graphics = "0.8"
+embedded-graphics-core = "0.4"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 tokio = { version = "1.0", features = ["rt", "rt-multi-thread", "macros"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -30,8 +33,6 @@ anyhow = "1.0"
 toml = "0.8"
 
 # Hardware-specific dependencies (only when hardware feature is enabled)
-epd-waveshare = { version = "0.6", optional = true }
-linux-embedded-hal = { version = "0.4", optional = true }
 embedded-hal = { version = "1.0", optional = true }
 embedded-hal-bus = { version = "0.3", optional = true }
 
@@ -45,7 +46,7 @@ rppal = { version = "0.17", optional = true, features = [] }
 tempfile = "3.8"
 
 [profile.release]
-# Optimize for size and memory usage on Pi Zero W
+# Optimize for size and memory usage on Pi Zero 2 W
 opt-level = "s"
 lto = true
 codegen-units = 1

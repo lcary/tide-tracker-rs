@@ -1,6 +1,6 @@
 # Tide Tracker
 
-A lean, memory-efficient tide tracking application for Raspberry Pi Zero W with Waveshare 4.2" e-ink display. Built entirely in Rust for maximum performance and reliability in embedded environments.
+A lean, memory-efficient tide tracking application for Raspberry Pi Zero 2 W with Waveshare 4.2" e-ink display. Built entirely in Rust for maximum performance and reliability in embedded environments.
 
 ## Features
 
@@ -15,10 +15,12 @@ A lean, memory-efficient tide tracking application for Raspberry Pi Zero W with 
 ## Hardware Requirements (Optional)
 
 ### Raspberry Pi (64-bit)
-- Any modern Raspberry Pi (Pi 3, 4, 5, or Zero 2 W)
-- 1GB+ RAM recommended
+- Any modern Raspberry Pi, but only tested for Zero 2 W currently
+- 500MB+ RAM recommended
 - Headless Linux (Raspberry Pi OS Lite recommended)  
-- SPI enabled (`sudo raspi-config` → Interface Options → SPI → Enable)
+- SPI configuration
+  - for 4.2": SPI DISABLED (`sudo raspi-config` → Interface Options → SPI → Disabled → Reboot)
+    - https://www.waveshare.com/wiki/4.2inch_e-Paper_Module_(B)_Manual#Python
 
 ### Waveshare 4.2" E-ink Display
 - Resolution: 400 × 300 pixels
@@ -31,43 +33,33 @@ The project successfully cross-compiles for ARM targets.
 ### Building for Raspberry Pi (ARM64)
 
 #### Option 1: Using Docker (Recommended)
-```bash
-# Install cross if not already installed
-cargo install cross
 
-# Build for Raspberry Pi using Docker
-cross build --release --target=aarch64-unknown-linux-gnu
-
-# With hardware features (e-ink display)
-cross build --release --target=aarch64-unknown-linux-gnu --features hardware
+Build for Raspberry Pi using Docker with hardware features (e-ink display)
 ```
+./build_rpi.sh
+```
+(Runs `cross build --release --target=aarch64-unknown-linux-gnu --features hardware`)
 
 #### Option 2: GitHub Actions CI
 The project includes GitHub Actions workflows that automatically build ARM64 binaries:
 - Push to main branch triggers ARM64 cross-compilation
 - Release tags automatically build and upload ARM64 binaries
 
-#### Option 3: Native ARM64 Toolchain
-```bash
-# On macOS with Homebrew
-brew install aarch64-linux-gnu-gcc
-
-# Build with custom linker
-cargo build --release --target=aarch64-unknown-linux-gnu
-```
-Final artifact: `target/aarch64-unknown-linux-gnu/release/tide-tracker`
-
 ### Cross-Compilation Notes
 
 - **Code Status**: ✅ All Rust code compiles successfully for ARM64
 - **Dependencies**: ✅ Hardware-specific deps are properly conditional
 - **Platform Separation**: ✅ macOS/Linux incompatibilities resolved
-- **Linker**: Requires proper ARM64 toolchain or Docker (via `cross`)
+- **Recommended Method**: Use `cross` (Option 1) for reliable builds
+- **Native Toolchain**: Requires `aarch64-unknown-linux-gnu-gcc` but may have dependency conflicts
+
+**If you encounter build errors:** The `ring` crate (used by `rustls` for TLS) requires cross-compilation toolchain. Use `cross` (Docker-based) which handles all dependencies automatically.
 
 ## Wiring Diagram
 
 Connect the Waveshare 4.2" e-ink display to your Raspberry Pi:
 
+**Standard Wiring:**
 ```
 Raspberry Pi GPIO     →    E-ink Display
 ─────────────────────────────────────
@@ -81,31 +73,51 @@ GPIO 17 (Pin 11)  →    RST
 GPIO 24 (Pin 18)  →    BUSY
 ```
 
+**Alternative Wiring (for hardware conflicts):**
+```
+Raspberry Pi GPIO     →    E-ink Display
+─────────────────────────────────────
+3.3V (Pin 1)      →    VCC
+GND (Pin 6)       →    GND
+GPIO 10 (Pin 19)  →    DIN (MOSI)  
+GPIO 11 (Pin 23)  →    CLK (SCLK)
+GPIO 7 (Pin 26)   →    CS           # Alternative CS pin
+GPIO 25 (Pin 22)  →    DC
+GPIO 27 (Pin 13)  →    RST          # Alternative RST pin  
+GPIO 24 (Pin 18)  →    BUSY
+```
+
 ### Pin Layout Reference
 ```
      3.3V → [ 1] [ 2]
             [ 3] [ 4]
             [ 5] [ 6] ← GND
-            [ 7] [ 8]
+      ALT CS→[ 7] [ 8]
             [ 9] [10]
     RST → [11] [12]
-           [13] [14]
+   ALT RST→[13] [14]
            [15] [16]
            [17] [18] ← BUSY
    MOSI → [19] [20]
            [21] [22] ← DC
     CLK → [23] [24] ← CS
-           [25] [26]
+           [25] [26] ← ALT CS (GPIO 7)
 ```
+
+**Legend:**
+- Standard pins: CS=8, RST=17  
+- Alternative pins: ALT CS=7, ALT RST=27
 
 ## Installation & Setup (on macOS)
 
 ### 1. Install Rust
 
+Also install cross for cross-compilation: `cargo install cross`
+
 ### 2. Build
 
- - `rustup target add aarch64-unknown-linux-gnu`
- - `cargo build --release --target=aarch64-unknown-linux-gnu`
+ - Start Docker
+ - `./build_rpi.sh`
  - `scp target/aarch64-unknown-linux-gnu/release/tide-tracker pi@0.0.0.0:~`
 
 ## Installation & Setup (on Pi)
@@ -123,7 +135,27 @@ cd tide-tracker
 cargo build --release
 ```
 
-### 3. Test Installation
+### 3. Test E-ink Display (Optional)
+Before running the main application, verify your e-ink display works:
+
+```bash
+# Quick test suite (Python + Rust)
+./scripts/test_display.sh
+
+# Python version (requires: pip3 install waveshare-epd pillow)
+python3 scripts/test_display.py
+
+# Rust version (uses same hardware libraries as main app)
+cargo run --bin test_display --features hardware --release
+```
+
+These test scripts will:
+- ✅ Check SPI connectivity
+- 🎨 Display test patterns and text  
+- 🧹 Clear the display
+- 💤 Put display to sleep properly
+
+### 4. Test Installation
 ```bash
 # Test with ASCII output (no hardware required)
 cargo run --release -- --stdout
@@ -137,7 +169,7 @@ sudo ./target/release/tide-tracker
 ### Development Mode (ASCII Output)
 Perfect for testing on your development machine:
 ```bash
-cargo run --release -- --stdout
+cargo run --release --bin tide-tracker -- --stdout
 ```
 
 Output example:
@@ -243,6 +275,36 @@ sudo journalctl -u tide-tracker.service -f
 
 ## Configuration
 
+### GPIO Pin Configuration
+
+The e-ink display GPIO pins are configurable via the `tide-config.toml` file. This allows you to override the default wiring if you have pin conflicts or hardware issues.
+
+**Default Pin Mapping:**
+```toml
+[display.hardware]
+cs_pin = 8    # GPIO 8 (Pin 24) - SPI Chip Select
+dc_pin = 25   # GPIO 25 (Pin 22) - Data/Command
+rst_pin = 17  # GPIO 17 (Pin 11) - Reset
+busy_pin = 24 # GPIO 24 (Pin 18) - Busy status
+```
+
+**Alternative Configuration Example:**
+If you have hardware conflicts (e.g., bad solder joints), you can override pins:
+```toml
+[display.hardware]
+cs_pin = 7    # GPIO 7 (Pin 26) - Alternative CS pin
+rst_pin = 27  # GPIO 27 (Pin 13) - Alternative reset pin
+# Keep other pins as default
+dc_pin = 25
+busy_pin = 24
+```
+
+**Important Notes:**
+- Ensure your physical wiring matches your configuration
+- Changes require restarting the tide-tracker service
+- Test with `./scripts/test_display.sh` after making changes
+- The configuration is loaded from the current directory's `tide-config.toml`
+
 ### Tide Station
 The default configuration uses Boston Harbor (NOAA Station ID: 8410140). To change:
 1. Find your station at https://tidesandcurrents.noaa.gov/
@@ -293,14 +355,25 @@ sudo systemctl status tide-tracker.service
 
 ### E-ink Display Issues
 ```bash
-# Check SPI is enabled
+# Check SPI, expect 0 and 1
 ls /dev/spi*
 
-# Verify GPIO permissions
-sudo usermod -a -G gpio,spi $USER
-
 # Test GPIO pins
-gpio readall
+pinctrl get
+
+# Test display with current configuration
+./scripts/test_display.sh
+
+# Check configuration is loaded correctly  
+cargo run --bin tide-tracker --release -- --stdout | head -3
+```
+
+**Hardware Pin Conflicts:**
+If you have bad solder joints or pin conflicts, override GPIO pins in `tide-config.toml`:
+```toml
+[display.hardware]
+cs_pin = 7    # Use GPIO 7 instead of 8
+rst_pin = 27  # Use GPIO 27 instead of 17
 ```
 
 ### Network Issues

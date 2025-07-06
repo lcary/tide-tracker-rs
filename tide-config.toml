@@ -45,3 +45,13 @@ height = 300
 
 # Font height in pixels (affects text size and spacing)
 font_height = 20
+
+# Hardware GPIO pin configuration for e-ink display
+# Default wiring for Waveshare 4.2" display on Raspberry Pi Zero 2 W
+# Override these if your wiring differs or you have pin conflicts
+[display.hardware]
+cs_pin = 7    # GPIO 7 (Pin 26) - Alternative CS pin
+rst_pin = 27  # GPIO 27 (Pin 13) - Alternative reset pin
+# Keep other pins as default
+dc_pin = 25
+busy_pin = 24

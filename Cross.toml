@@ -9,7 +9,7 @@ passthrough = [
 ]
 
 [target.aarch64-unknown-linux-gnu]
-# Raspberry Pi Zero W and similar ARM64 devices
+# Raspberry Pi Zero 2 W and similar ARM64 devices
 image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:main"
 
 [target.x86_64-unknown-linux-gnu]

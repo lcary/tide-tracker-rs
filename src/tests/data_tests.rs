@@ -366,7 +366,7 @@ mod performance_tests {
 
     /// Test that fallback model generation is fast enough for embedded use.
     ///
-    /// The Pi Zero W is slow, so operations should complete quickly.
+    /// The Pi Zero 2 W is slow, so operations should complete quickly.
     #[test]
     fn fallback_generation_is_fast() {
         let start = Instant::now();

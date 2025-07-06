@@ -1,2 +1,5 @@
 target/
 .vscode/
+*.log
+*.rcgu.o
+.DS_Store

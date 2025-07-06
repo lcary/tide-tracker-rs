@@ -26,7 +26,7 @@ Brief description of the changes in this PR.
 - [ ] Configuration documentation updated (if needed)
 
 ## Hardware Compatibility
-- [ ] Tested on Raspberry Pi Zero W
+- [ ] Tested on Raspberry Pi Zero 2 W
 - [ ] Tested on Raspberry Pi 4
 - [ ] Tested on x86_64 Linux
 - [ ] E-ink display functionality verified (if applicable)

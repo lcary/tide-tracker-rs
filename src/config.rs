@@ -1,9 +1,8 @@
-//! # Configuration Management
-//!
-//! This module handles loading and parsing configuration from the tide-config.toml file.
-//! It provides a centralized way to configure NOAA station settings, display options,
-//! and other runtime parameters.
-
+/// # Configuration Management
+///
+/// This module handles loading and parsing configuration from the tide-config.toml file.
+/// It provides a centralized way to configure NOAA station settings, display options,
+/// and other runtime parameters.
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -45,6 +44,29 @@ pub struct DisplayConfig {
     pub height: i32,
     /// Font size for e-ink display (affects text rendering)
     pub font_height: i32,
+    /// Hardware GPIO pin configuration
+    pub hardware: HardwareConfig,
+}
+
+/// Hardware GPIO pin configuration for e-ink display
+///
+/// Default pin mapping for Waveshare 4.2" e-ink display on Raspberry Pi Zero 2 W:
+/// - CS (Chip Select): GPIO 8 (Pin 24) - SPI device selection
+/// - DC (Data/Command): GPIO 25 (Pin 22) - Data vs command mode  
+/// - RST (Reset): GPIO 17 (Pin 11) - Hardware reset signal
+/// - BUSY: GPIO 24 (Pin 18) - Display busy status indicator
+///
+/// Override these values if your wiring differs or hardware has conflicts.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct HardwareConfig {
+    /// SPI Chip Select pin (default: GPIO 8, Pin 24)
+    pub cs_pin: u32,
+    /// Data/Command control pin (default: GPIO 25, Pin 22)
+    pub dc_pin: u32,
+    /// Reset pin (default: GPIO 17, Pin 11)
+    pub rst_pin: u32,
+    /// Busy status pin (default: GPIO 24, Pin 18)
+    pub busy_pin: u32,
 }
 
 impl Default for Config {
@@ -62,6 +84,12 @@ impl Default for Config {
                 width: 400,      // Waveshare 4.2" display
                 height: 300,     // Waveshare 4.2" display
                 font_height: 20, // FONT_10X20 height
+                hardware: HardwareConfig {
+                    cs_pin: 8,    // GPIO 8 (Pin 24) - SPI Chip Select
+                    dc_pin: 25,   // GPIO 25 (Pin 22) - Data/Command
+                    rst_pin: 17,  // GPIO 17 (Pin 11) - Reset
+                    busy_pin: 24, // GPIO 24 (Pin 18) - Busy status
+                },
             },
         }
     }

@@ -73,7 +73,7 @@ pub enum TideError {
 /// Cache file location on filesystem
 ///
 /// Using /tmp ensures the cache is cleared on reboot and doesn't consume
-/// permanent storage on the Pi Zero W's limited SD card space.
+/// permanent storage on the Pi Zero 2 W's limited SD card space.
 const CACHE: &str = "/tmp/tide_cache.json";
 
 /// Cache time-to-live in seconds (30 minutes)

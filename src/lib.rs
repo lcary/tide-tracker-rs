@@ -2,7 +2,7 @@
 //!
 //! This library provides the foundational data structures and types for the tide tracker
 //! application. It's designed for extreme memory efficiency on embedded systems like
-//! the Raspberry Pi Zero W (512 MB RAM total).
+//! the Raspberry Pi Zero 2 W (512 MB RAM total).
 //!
 //! ## Design Philosophy
 //!
@@ -108,3 +108,7 @@ pub struct TideSeries {
     /// True if using fallback model instead of real NOAA data
     pub offline: bool,
 }
+
+// Custom EPD module for hardware rendering
+#[cfg(all(target_os = "linux", feature = "hardware"))]
+pub mod epd4in2b_v2;
