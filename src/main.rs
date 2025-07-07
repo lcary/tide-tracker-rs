@@ -188,15 +188,18 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
     eprintln!("📤 Updating e-ink display...");
     eprintln!("     ⚠️  This should be called EXACTLY ONCE to avoid flickering");
 
-    // Display the rendered data
-    eprintln!("     🔄 About to call epd.display_c_exact() - this matches C code exactly including red inversion");
-    epd.display_c_exact(display_buffer.black_buffer(), display_buffer.red_buffer())?;
-    eprintln!("     ✅ epd.display_c_exact() completed - data written with C code exact behavior");
+    // Since black-only mode shows nothing, try simpler approaches
+    eprintln!("     🧪 EXPERIMENTAL: Trying simple fill test (alternating stripes)...");
+    epd.display_simple_fill_test()?;
+    eprintln!("     ✅ Simple fill test completed");
 
-    // CRITICAL: Power off and deep sleep for persistence (from cheat sheet)
-    eprintln!("     💤 CRITICAL: Calling power off and deep sleep for persistence...");
-    epd.power_off_and_deep_sleep()?;
-    eprintln!("     ✅ Power off and deep sleep completed - image should now persist!");
+    // If that works, we can try the full C test sequence next
+    // eprintln!("     🧪 EXPERIMENTAL: Trying C test sequence...");
+    // epd.display_c_test_sequence(display_buffer.black_buffer(), display_buffer.red_buffer())?;
+    // eprintln!("     ✅ C test sequence completed");
+
+    // SKIP power-off for now to isolate the display issue
+    eprintln!("     ⚠️  SKIPPING power-off sequence to isolate display flickering issue");
 
     eprintln!("     ✅ Display function completed");
 
