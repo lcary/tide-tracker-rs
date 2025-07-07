@@ -376,3 +376,19 @@ valgrind --leak-check=full ./target/release/tide-tracker --stdout
 ## License
 
 - MIT License
+
+## Development Plan
+
+- [x] Initial implementation
+- [x] Test ASCII output (macOS)
+- [x] Test Hardware build (Raspberry Pi)
+- [x] Support configuration file loading
+- [x] Test rendering (Waveshare e-Paper)
+- [x] Fix persistence (e-Paper)
+- [ ] Fix mangled simple chart data (e-Paper)
+- [ ] Test actual chart rendering (e-Paper)
+- [ ] Replace deprecated rppal with gpio-cdev (or pull in rppal code)
+- [ ] Set up cronjob/svc
+- [ ] Test Pi device restart resilience
+- [ ] Build and install in frame
+- [ ] Support automatic config creation w/ location check
