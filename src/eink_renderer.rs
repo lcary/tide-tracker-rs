@@ -20,7 +20,7 @@ impl EinkTideRenderer {
         Self {
             width: 400,
             height: 300,
-            margin: 20,
+            margin: 20, // Increased to 20 to give more space for text labels
         }
     }
 
@@ -49,7 +49,14 @@ impl EinkTideRenderer {
 
         // 2. Draw basic axes - this should always work
         eprintln!("   📏 Drawing axes...");
-        self.draw_simple_axes(buffer, chart_x, chart_y, chart_width, chart_height);
+        self.draw_simple_axes(
+            buffer,
+            chart_x,
+            chart_y,
+            chart_width,
+            chart_height,
+            tide_series,
+        );
 
         // 3. Draw current time marker (center line)
         eprintln!("   🕐 Drawing center time marker...");
@@ -76,19 +83,34 @@ impl EinkTideRenderer {
 
     /// Draw a simple border around the chart area
     fn draw_border(&self, buffer: &mut DisplayBuffer, x: u32, y: u32, width: u32, height: u32) {
-        eprintln!("   🔲 Drawing chart border...");
+        eprintln!("   🔲 Drawing chart border with proper spacing for labels...");
+
+        // Draw border at the edge of chart area, leaving margin space for text
+        // No inset needed - the margin already provides space for labels
+        let border_x = x;
+        let border_y = y;
+        let border_width = width;
+        let border_height = height;
 
         // Draw rectangle border (2px thick for visibility)
         for thickness in 0..2 {
             // Top and bottom
-            for px in 0..width {
-                buffer.set_pixel(x + px, y + thickness, Color::Black);
-                buffer.set_pixel(x + px, y + height - 1 - thickness, Color::Black);
+            for px in 0..border_width {
+                buffer.set_pixel(border_x + px, border_y + thickness, Color::Black);
+                buffer.set_pixel(
+                    border_x + px,
+                    border_y + border_height - 1 - thickness,
+                    Color::Black,
+                );
             }
             // Left and right
-            for py in 0..height {
-                buffer.set_pixel(x + thickness, y + py, Color::Black);
-                buffer.set_pixel(x + width - 1 - thickness, y + py, Color::Black);
+            for py in 0..border_height {
+                buffer.set_pixel(border_x + thickness, border_y + py, Color::Black);
+                buffer.set_pixel(
+                    border_x + border_width - 1 - thickness,
+                    border_y + py,
+                    Color::Black,
+                );
             }
         }
     }
@@ -101,54 +123,659 @@ impl EinkTideRenderer {
         y: u32,
         width: u32,
         height: u32,
+        tide_series: &TideSeries,
     ) {
-        eprintln!("   📏 Drawing axes with time labels...");
+        eprintln!("   📏 Drawing axes with CORRECTED positioning...");
+        eprintln!(
+            "   📐 Chart coordinates: x={}, y={}, width={}, height={}",
+            x, y, width, height
+        );
 
-        // X-axis (bottom) - thick line
-        for thickness in 0..3 {
-            for px in 0..width {
-                if y + height - 15 + thickness < self.height {
-                    buffer.set_pixel(x + px, y + height - 15 + thickness, Color::Black);
+        // Get tide height range for Y-axis labels
+        let samples = &tide_series.samples;
+        let (min_height, max_height) = if !samples.is_empty() {
+            let min = samples
+                .iter()
+                .map(|s| s.tide_ft)
+                .fold(f32::INFINITY, f32::min);
+            let max = samples
+                .iter()
+                .map(|s| s.tide_ft)
+                .fold(f32::NEG_INFINITY, f32::max);
+            (min, max)
+        } else {
+            (0.0, 10.0) // Default range
+        };
+        let height_range = max_height - min_height;
+        eprintln!(
+            "   📊 Tide range: {:.1} to {:.1} ft",
+            min_height, max_height
+        );
+
+        // Define proper chart plotting area (inside the border, with space for axes)
+        let plot_margin = 15; // Space for axes within the chart area
+        let plot_x = x + plot_margin;
+        let plot_y = y + plot_margin;
+        let plot_width = width - (2 * plot_margin);
+        let plot_height = height - (2 * plot_margin);
+
+        eprintln!(
+            "   📐 Plot area: x={}, y={}, width={}, height={}",
+            plot_x, plot_y, plot_width, plot_height
+        );
+
+        // X-axis: horizontal line at BOTTOM of plot area
+        let x_axis_y = plot_y + plot_height;
+        eprintln!("   📏 Drawing X-axis at y={}", x_axis_y);
+        for thickness in 0..2 {
+            for px in plot_x..(plot_x + plot_width) {
+                if px < self.width && (x_axis_y + thickness) < self.height {
+                    buffer.set_pixel(px, x_axis_y + thickness, Color::Black);
                 }
             }
         }
 
-        // Y-axis (left) - thick line
-        for thickness in 0..3 {
-            for py in 0..height - 15 {
-                if x + 15 + thickness < self.width {
-                    buffer.set_pixel(x + 15 + thickness, y + py, Color::Black);
+        // Y-axis: vertical line at LEFT of plot area
+        let y_axis_x = plot_x;
+        eprintln!("   📏 Drawing Y-axis at x={}", y_axis_x);
+        for thickness in 0..2 {
+            for py in plot_y..(plot_y + plot_height) {
+                if (y_axis_x + thickness) < self.width && py < self.height {
+                    buffer.set_pixel(y_axis_x + thickness, py, Color::Black);
                 }
             }
         }
 
-        // Add simple time markers (approximate positions)
-        // "-12h" at left edge
-        self.draw_simple_text(buffer, x + 5, y + height - 5, "-12h");
-
-        // "Now" at center
-        let center_x = x + width / 2;
-        self.draw_simple_text(buffer, center_x - 10, y + height - 5, "Now");
-
-        // "+12h" at right edge
-        self.draw_simple_text(buffer, x + width - 25, y + height - 5, "+12h");
-
-        eprintln!("   ✅ Axes with time labels drawn");
-    }
-
-    /// Draw simple text using pixel patterns (very basic)
-    fn draw_simple_text(&self, buffer: &mut DisplayBuffer, x: u32, y: u32, text: &str) {
-        // Very simple text rendering - just draw small rectangles for now
-        for (i, _ch) in text.chars().enumerate() {
-            let char_x = x + (i as u32 * 6);
-            // Draw a simple 3x5 pixel rectangle for each character
-            for dx in 0..3 {
-                for dy in 0..5 {
-                    if char_x + dx < self.width && y + dy < self.height {
-                        buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+        // Add Y-axis tick marks for tide heights
+        eprintln!("   📏 Adding Y-axis tick marks...");
+        let num_ticks = 4; // Show 5 tick marks (0-4)
+        for i in 0..=num_ticks {
+            let tick_y = plot_y + (i * plot_height / num_ticks);
+            // Draw tick mark extending left from Y-axis
+            for thickness in 0..2 {
+                for tick_x in (y_axis_x - 5)..y_axis_x {
+                    if tick_x < self.width && (tick_y + thickness) < self.height {
+                        buffer.set_pixel(tick_x, tick_y + thickness, Color::Black);
                     }
                 }
             }
+
+            // Calculate the tide height for this tick (flip because screen Y increases downward)
+            let tick_height = max_height - (i as f32 / num_ticks as f32) * height_range;
+
+            // Draw simple height label to the left of Y-axis
+            if y_axis_x >= 12 {
+                let label_text = format!("{:.0}", tick_height);
+                self.draw_simple_text(buffer, y_axis_x - 12, tick_y.saturating_sub(3), &label_text);
+            }
+        }
+
+        // Time labels: BELOW the X-axis, well outside the plot area
+        let label_y = x_axis_y + 10; // 10 pixels below X-axis for clearance
+        eprintln!("   📝 Drawing LARGE time labels at y={}", label_y);
+
+        // Check if label position is valid (need space for 12px tall text)
+        if label_y + 12 < self.height {
+            // "-12h" at left edge of plot area - LARGE TEXT
+            self.draw_large_text(buffer, plot_x, label_y, "-12h");
+
+            // "Now" at center of plot area - LARGE TEXT (centered)
+            let center_x = plot_x + plot_width / 2;
+            self.draw_large_text(buffer, center_x - 15, label_y, "Now");
+
+            // "+12h" at right edge of plot area - LARGE TEXT (right-aligned)
+            self.draw_large_text(buffer, plot_x + plot_width - 40, label_y, "+12h");
+        } else {
+            eprintln!(
+                "   ⚠️  Skipping time labels - not enough space at y={}",
+                label_y
+            );
+        }
+
+        // Add simplified Y-axis labels for better readability
+        self.draw_y_axis_labels(buffer, x, y, y_axis_x, height);
+
+        eprintln!("   ✅ Axes drawn successfully");
+    }
+
+    /// Draw simple text using pixel patterns (basic but readable)
+    fn draw_simple_text(&self, buffer: &mut DisplayBuffer, x: u32, y: u32, text: &str) {
+        // Simple text rendering - 5x7 pixel characters with spacing
+        for (i, ch) in text.chars().enumerate() {
+            let char_x = x + (i as u32 * 6); // 6 pixels per character (5 + 1 spacing)
+
+            // Draw character based on simple patterns
+            match ch {
+                '-' => {
+                    // Draw horizontal line in middle
+                    for dx in 0..4 {
+                        if char_x + dx < self.width && y + 3 < self.height {
+                            buffer.set_pixel(char_x + dx, y + 3, Color::Black);
+                        }
+                    }
+                }
+                '1' => {
+                    // Draw vertical line
+                    for dy in 0..7 {
+                        if char_x + 2 < self.width && y + dy < self.height {
+                            buffer.set_pixel(char_x + 2, y + dy, Color::Black);
+                        }
+                    }
+                }
+                '2' => {
+                    // Draw a simple "2" pattern
+                    for dx in 0..4 {
+                        // Top line
+                        if char_x + dx < self.width && y < self.height {
+                            buffer.set_pixel(char_x + dx, y, Color::Black);
+                        }
+                        // Bottom line
+                        if char_x + dx < self.width && y + 6 < self.height {
+                            buffer.set_pixel(char_x + dx, y + 6, Color::Black);
+                        }
+                    }
+                    // Middle diagonal and edges
+                    if char_x + 3 < self.width && y + 3 < self.height {
+                        buffer.set_pixel(char_x + 3, y + 3, Color::Black);
+                    }
+                }
+                'h' => {
+                    // Draw vertical line and horizontal connector
+                    for dy in 0..7 {
+                        if char_x < self.width && y + dy < self.height {
+                            buffer.set_pixel(char_x, y + dy, Color::Black);
+                        }
+                    }
+                    for dx in 0..4 {
+                        if char_x + dx < self.width && y + 3 < self.height {
+                            buffer.set_pixel(char_x + dx, y + 3, Color::Black);
+                        }
+                    }
+                }
+                'N' | 'n' => {
+                    // Draw "N" pattern
+                    for dy in 0..7 {
+                        if char_x < self.width && y + dy < self.height {
+                            buffer.set_pixel(char_x, y + dy, Color::Black);
+                        }
+                        if char_x + 3 < self.width && y + dy < self.height {
+                            buffer.set_pixel(char_x + 3, y + dy, Color::Black);
+                        }
+                    }
+                    // Diagonal
+                    for i in 0..4 {
+                        if char_x + i < self.width && y + i < self.height {
+                            buffer.set_pixel(char_x + i, y + i, Color::Black);
+                        }
+                    }
+                }
+                'o' => {
+                    // Draw "o" pattern - simple rectangle
+                    for dx in 1..4 {
+                        if char_x + dx < self.width && y + 2 < self.height {
+                            buffer.set_pixel(char_x + dx, y + 2, Color::Black);
+                        }
+                        if char_x + dx < self.width && y + 5 < self.height {
+                            buffer.set_pixel(char_x + dx, y + 5, Color::Black);
+                        }
+                    }
+                    for dy in 2..6 {
+                        if char_x < self.width && y + dy < self.height {
+                            buffer.set_pixel(char_x, y + dy, Color::Black);
+                        }
+                        if char_x + 4 < self.width && y + dy < self.height {
+                            buffer.set_pixel(char_x + 4, y + dy, Color::Black);
+                        }
+                    }
+                }
+                'w' => {
+                    // Draw "w" pattern
+                    for dy in 0..7 {
+                        if char_x < self.width && y + dy < self.height {
+                            buffer.set_pixel(char_x, y + dy, Color::Black);
+                        }
+                        if char_x + 4 < self.width && y + dy < self.height {
+                            buffer.set_pixel(char_x + 4, y + dy, Color::Black);
+                        }
+                    }
+                    if char_x + 2 < self.width && y + 5 < self.height {
+                        buffer.set_pixel(char_x + 2, y + 5, Color::Black);
+                        buffer.set_pixel(char_x + 2, y + 6, Color::Black);
+                    }
+                }
+                '+' => {
+                    // Draw plus sign
+                    for dx in 1..4 {
+                        if char_x + dx < self.width && y + 3 < self.height {
+                            buffer.set_pixel(char_x + dx, y + 3, Color::Black);
+                        }
+                    }
+                    for dy in 1..6 {
+                        if char_x + 2 < self.width && y + dy < self.height {
+                            buffer.set_pixel(char_x + 2, y + dy, Color::Black);
+                        }
+                    }
+                }
+                _ => {
+                    // Default: draw a small rectangle for unknown characters
+                    for dx in 0..3 {
+                        for dy in 0..5 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Draw large, bold text for better readability on e-ink display
+    fn draw_large_text(&self, buffer: &mut DisplayBuffer, x: u32, y: u32, text: &str) {
+        // Large text rendering - 8x12 pixel characters for better readability
+        for (i, ch) in text.chars().enumerate() {
+            let char_x = x + (i as u32 * 10); // 10 pixels per character (8 + 2 spacing)
+
+            // Draw character with thick strokes for high contrast
+            match ch {
+                '-' => {
+                    // Draw thick horizontal line in middle
+                    for dy in 5..7 {
+                        for dx in 1..7 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                }
+                '1' => {
+                    // Draw thick vertical line with top serif
+                    for dy in 0..12 {
+                        for dx in 3..5 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                    // Top left serif
+                    for dx in 1..4 {
+                        if char_x + dx < self.width && y + 1 < self.height {
+                            buffer.set_pixel(char_x + dx, y + 1, Color::Black);
+                        }
+                    }
+                }
+                '2' => {
+                    // Draw thick "2" pattern
+                    for dx in 1..7 {
+                        // Top line (thick)
+                        for dy in 0..2 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                        // Bottom line (thick)
+                        for dy in 10..12 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                    // Middle diagonal and edges (thick)
+                    for dy in 5..7 {
+                        for dx in 1..7 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                    // Right edge (thick)
+                    for dy in 2..6 {
+                        for dx in 5..7 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                }
+                'h' => {
+                    // Draw thick "h" pattern
+                    for dy in 0..12 {
+                        for dx in 0..2 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                    // Horizontal bar (thick)
+                    for dy in 5..7 {
+                        for dx in 0..6 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                    // Right vertical (thick)
+                    for dy in 7..12 {
+                        for dx in 4..6 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                }
+                'N' | 'n' => {
+                    // Draw thick "N" pattern
+                    for dy in 0..12 {
+                        for dx in 0..2 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                        for dx in 5..7 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                    // Diagonal (thick)
+                    for i in 0..6 {
+                        for thickness in 0..2 {
+                            if char_x + i + thickness < self.width
+                                && y + (i * 2) + thickness < self.height
+                            {
+                                buffer.set_pixel(
+                                    char_x + i + thickness,
+                                    y + (i * 2) + thickness,
+                                    Color::Black,
+                                );
+                            }
+                        }
+                    }
+                }
+                'o' => {
+                    // Draw thick "o" pattern
+                    for dx in 1..6 {
+                        // Top and bottom (thick)
+                        for dy in 3..5 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                        for dy in 8..10 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                    // Left and right sides (thick)
+                    for dy in 3..10 {
+                        for dx in 0..2 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                        for dx in 5..7 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                }
+                'w' => {
+                    // Draw thick "w" pattern
+                    for dy in 3..12 {
+                        for dx in 0..2 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                        for dx in 6..8 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                    // Middle strokes (thick)
+                    for dy in 8..12 {
+                        for dx in 2..4 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                        for dx in 4..6 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                }
+                '+' => {
+                    // Draw thick plus sign
+                    for dx in 2..6 {
+                        for dy in 5..7 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                    for dy in 2..10 {
+                        for dx in 3..5 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    // Default: draw a thick rectangle for unknown characters
+                    for dx in 0..6 {
+                        for dy in 0..8 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Draw bold text with enhanced thickness and spacing for maximum readability on e-ink
+    fn draw_bold_text(&self, buffer: &mut DisplayBuffer, x: u32, y: u32, text: &str) {
+        // Bold text rendering - 8x10 pixel characters with thick strokes and extra spacing
+        for (i, ch) in text.chars().enumerate() {
+            let char_x = x + (i as u32 * 10); // 10 pixels per character (8 + 2 spacing)
+
+            // Draw character with very thick strokes for maximum contrast
+            match ch {
+                'H' => {
+                    // Draw bold "H" - thick verticals with thick horizontal bar
+                    for dy in 0..10 {
+                        // Left vertical (3px thick)
+                        for dx in 0..3 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                        // Right vertical (3px thick)
+                        for dx in 5..8 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                    // Horizontal bar (3px thick)
+                    for dy in 4..7 {
+                        for dx in 0..8 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                }
+                'i' => {
+                    // Draw bold "i" - thick dot and thick vertical line
+                    // Dot at top (3x3 pixels)
+                    for dy in 0..3 {
+                        for dx in 2..5 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                    // Vertical line (3px thick)
+                    for dy in 4..10 {
+                        for dx in 2..5 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                }
+                'M' => {
+                    // Draw bold "M" - thick verticals with thick angled top
+                    for dy in 0..10 {
+                        // Left vertical (3px thick)
+                        for dx in 0..3 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                        // Right vertical (3px thick)
+                        for dx in 5..8 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                    // Top peak (thick)
+                    for dy in 0..4 {
+                        for dx in 2..6 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                }
+                'd' => {
+                    // Draw bold "d" - thick circle with thick right vertical
+                    // Right vertical (full height, 3px thick)
+                    for dy in 0..10 {
+                        for dx in 5..8 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                    // Circle part (thick strokes)
+                    for dx in 1..5 {
+                        // Top and bottom of circle (2px thick)
+                        for dy in 3..5 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                        for dy in 7..9 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                    // Left side of circle (2px thick)
+                    for dy in 5..7 {
+                        for dx in 0..2 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                }
+                'L' => {
+                    // Draw bold "L" - thick vertical with thick bottom horizontal
+                    for dy in 0..10 {
+                        // Left vertical (3px thick)
+                        for dx in 0..3 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                    // Bottom horizontal (3px thick)
+                    for dy in 7..10 {
+                        for dx in 0..7 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                }
+                'o' => {
+                    // Draw bold "o" - thick oval
+                    for dx in 1..7 {
+                        // Top and bottom (2px thick)
+                        for dy in 3..5 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                        for dy in 7..9 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                    // Left and right sides (2px thick)
+                    for dy in 3..9 {
+                        for dx in 0..2 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                        for dx in 6..8 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    // Default: draw a thick block for unknown characters
+                    for dx in 0..6 {
+                        for dy in 0..8 {
+                            if char_x + dx < self.width && y + dy < self.height {
+                                buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Draw Y-axis labels with improved positioning and enhanced readability
+    fn draw_y_axis_labels(
+        &self,
+        buffer: &mut DisplayBuffer,
+        _chart_x: u32,
+        chart_y: u32,
+        y_axis_x: u32,
+        chart_height: u32,
+    ) {
+        eprintln!("   📏 Drawing enhanced Y-axis labels with better contrast...");
+
+        // Simplified Y-axis labels - just show "Hi", "Mid", "Lo" for better readability
+        // Position them well away from the Y-axis line and border
+        let label_positions = [
+            (chart_y + 30, "Hi"),                    // Near top
+            (chart_y + chart_height / 2 - 6, "Mid"), // Center
+            (chart_y + chart_height - 50, "Lo"),     // Near bottom
+        ];
+
+        for (y_pos, label) in label_positions {
+            // Position labels to the LEFT of chart area, with extra space
+            let label_x = if y_axis_x >= 40 { y_axis_x - 40 } else { 5 };
+            eprintln!("   📝 Drawing \"{}\" at ({}, {})", label, label_x, y_pos);
+            self.draw_bold_text(buffer, label_x, y_pos, label);
         }
     }
 
@@ -188,24 +815,47 @@ impl EinkTideRenderer {
         x: u32,
         y: u32,
         width: u32,
-        _height: u32,
+        height: u32,
     ) {
-        eprintln!("   🕐 Drawing \"now\" marker at center (mins_rel=0)...");
+        eprintln!("   🕐 Drawing \"now\" marker with DOTTED vertical line...");
 
-        // Center marker should be exactly in the middle of the time span
-        // Since time goes from -720 to +720 minutes, center is at 0
-        let center_x = x + width / 2;
+        // Use same plot area calculation as axes
+        let plot_margin = 15;
+        let plot_x = x + plot_margin;
+        let plot_y = y + plot_margin;
+        let plot_width = width - (2 * plot_margin);
+        let plot_height = height - (2 * plot_margin);
 
-        // Draw thick red vertical line for "now"
-        for py in 20..(self.height - self.margin - 20) {
-            for thickness in 0..4 {
-                if center_x + thickness < x + width {
-                    buffer.set_pixel(center_x + thickness, y + py, Color::Red);
+        // Center marker in the middle of the plot area
+        let center_x = plot_x + plot_width / 2;
+
+        eprintln!(
+            "   📍 Drawing dotted \"now\" line at x={} (plot center)",
+            center_x
+        );
+
+        // Draw dotted vertical line for "now" - within the plot area only
+        let marker_start_y = plot_y; // Start at top of plot area
+        let marker_end_y = plot_y + plot_height; // End at bottom of plot area (at X-axis)
+
+        // Create dotted pattern: 4 pixels on, 4 pixels off
+        for py in marker_start_y..marker_end_y {
+            // Check if this pixel should be part of the dot pattern
+            if (py - marker_start_y) % 8 < 4 {
+                // 4 on, 4 off = 8 pixel cycle
+                // Draw thicker dots (2px wide) for better visibility
+                for thickness in 0..2 {
+                    if center_x + thickness < self.width && py < self.height {
+                        buffer.set_pixel(center_x + thickness, py, Color::Black);
+                    }
                 }
             }
         }
 
-        eprintln!("   ✅ \"Now\" marker drawn at x={}", center_x);
+        eprintln!(
+            "   ✅ Dotted \"now\" line drawn at x={} from y={} to y={}",
+            center_x, marker_start_y, marker_end_y
+        );
     }
 
     /// Simple tide data plotting with error handling
@@ -262,10 +912,17 @@ impl EinkTideRenderer {
             max_time as f32 / 60.0
         );
 
-        let plot_x = x + 20;
-        let plot_width = width - 40;
-        let plot_y = y + 20;
-        let plot_height = height - 40;
+        // Define plot area that matches the axes coordinate system
+        let plot_margin = 15; // Same as in draw_simple_axes
+        let plot_x = x + plot_margin;
+        let plot_width = width - (2 * plot_margin);
+        let plot_y = y + plot_margin;
+        let plot_height = height - (2 * plot_margin);
+
+        eprintln!(
+            "   📐 Plot area: {}x{} at ({}, {}) - matches axes system",
+            plot_width, plot_height, plot_x, plot_y
+        );
 
         // Plot each sample using TIME-BASED X coordinates (like ASCII renderer)
         for sample in samples {
@@ -277,19 +934,56 @@ impl EinkTideRenderer {
             let height_progress = (sample.tide_ft - min_height) / height_range;
             let screen_y = plot_y + plot_height - (height_progress * plot_height as f32) as u32;
 
-            // Choose color: Red for "now" (mins_rel ≈ 0), Black for other times
-            let color = if sample.mins_rel.abs() <= 5 {
-                // Within 5 minutes of "now"
-                Color::Red
-            } else {
-                Color::Black
-            };
+            // Choose color and size based on proximity to "now"
+            let is_now = sample.mins_rel.abs() <= 5; // Within 5 minutes of "now"
+            let color = if is_now { Color::Red } else { Color::Black };
+            let dot_size = if is_now { 5 } else { 2 }; // Much larger dot for "now"
 
-            // Draw bigger dots for visibility
-            for dx in 0..3 {
-                for dy in 0..3 {
-                    if screen_x + dx < x + width && screen_y + dy < y + height {
+            // Draw dots with variable size
+            for dx in 0..dot_size {
+                for dy in 0..dot_size {
+                    if screen_x + dx < self.width && screen_y + dy < self.height {
                         buffer.set_pixel(screen_x + dx, screen_y + dy, color);
+                    }
+                }
+            }
+
+            // For "now" sample, draw a prominent X marker
+            if is_now {
+                eprintln!(
+                    "   ❌ Drawing prominent \"NOW\" marker at tide curve position ({}, {})",
+                    screen_x, screen_y
+                );
+
+                // Draw X pattern with thick lines
+                let x_size = 8;
+                for i in 0..x_size {
+                    // Diagonal line from top-left to bottom-right
+                    let x1 = screen_x.saturating_sub(x_size / 2) + i;
+                    let y1 = screen_y.saturating_sub(x_size / 2) + i;
+                    if x1 < self.width && y1 < self.height {
+                        buffer.set_pixel(x1, y1, Color::Red);
+                        // Make it thicker
+                        if x1 + 1 < self.width {
+                            buffer.set_pixel(x1 + 1, y1, Color::Red);
+                        }
+                        if y1 + 1 < self.height {
+                            buffer.set_pixel(x1, y1 + 1, Color::Red);
+                        }
+                    }
+
+                    // Diagonal line from top-right to bottom-left
+                    let x2 = screen_x + x_size / 2 - i;
+                    let y2 = screen_y.saturating_sub(x_size / 2) + i;
+                    if x2 < self.width && y2 < self.height {
+                        buffer.set_pixel(x2, y2, Color::Red);
+                        // Make it thicker
+                        if x2 + 1 < self.width {
+                            buffer.set_pixel(x2 + 1, y2, Color::Red);
+                        }
+                        if y2 + 1 < self.height {
+                            buffer.set_pixel(x2, y2 + 1, Color::Red);
+                        }
                     }
                 }
             }

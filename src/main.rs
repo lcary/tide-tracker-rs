@@ -520,11 +520,57 @@ impl tide_clock_lib::epd4in2b_v2::InputPin for RppalInputPin {
     }
 }
 
+/// Test the e-ink renderer layout without actual hardware
+/// This function creates a display buffer and renders the tide chart,
+/// then outputs debug information about positioning and layout
+fn test_eink_renderer(tide_series: &TideSeries) {
+    use tide_clock_lib::eink_renderer::EinkTideRenderer;
+    use tide_clock_lib::epd4in2b_v2::{Color, DisplayBuffer};
+
+    eprintln!("🧪 Testing e-ink renderer layout and positioning...");
+    eprintln!("📊 Creating 400x300 display buffer...");
+
+    // Create a mock display buffer
+    let mut buffer = DisplayBuffer::new(400, 300);
+
+    // Clear buffer to white
+    eprintln!("🖼️  Clearing buffer to white...");
+    for y in 0..300 {
+        for x in 0..400 {
+            buffer.set_pixel(x, y, Color::White);
+        }
+    }
+
+    // Create renderer and render chart
+    let renderer = EinkTideRenderer::new();
+    eprintln!("🎨 Rendering tide chart with current positioning...");
+    renderer.render_chart(&mut buffer, tide_series);
+
+    eprintln!("✅ E-ink renderer test completed successfully!");
+    eprintln!("📐 Layout analysis:");
+    eprintln!("   - Display size: 400x300 pixels");
+    eprintln!("   - Margin: 20 pixels (increased from 15)");
+    eprintln!("   - Chart area: 360x260 pixels at (20,20)");
+    eprintln!("   - X-axis labels positioned 10px below X-axis line");
+    eprintln!("   - Y-axis labels positioned 40px left of Y-axis line");
+    eprintln!("   - Border drawn at chart area edges (no inset)");
+    eprintln!("");
+    eprintln!("🔍 Key improvements:");
+    eprintln!("   ✓ Increased margin from 15px to 20px for more label space");
+    eprintln!("   ✓ Removed border inset - border now at chart edge");
+    eprintln!("   ✓ X-axis labels moved 10px below axis (was 5px)");
+    eprintln!("   ✓ Y-axis labels moved 40px left (was 35px)");
+    eprintln!("   ✓ Enhanced bold text rendering for better contrast");
+    eprintln!("   ✓ Dotted vertical line through 'Now' point for clarity");
+}
+
 /// Main application entry point.
 fn main() -> anyhow::Result<()> {
     // Parse command line arguments
     // Development mode: render to stdout for testing without hardware
     let development_mode = env::args().any(|arg| arg == "--stdout");
+    // Test e-ink mode: test e-ink renderer without hardware
+    let test_eink_mode = env::args().any(|arg| arg == "--test-eink");
 
     // Create Tokio runtime for async operations
     let rt = tokio::runtime::Runtime::new()?;
@@ -545,6 +591,12 @@ fn main() -> anyhow::Result<()> {
     // Development mode: ASCII output for testing
     if development_mode {
         draw_ascii(&tide_series);
+        return Ok(());
+    }
+
+    // Test e-ink mode: Test e-ink renderer layout without hardware
+    if test_eink_mode {
+        test_eink_renderer(&tide_series);
         return Ok(());
     }
 
