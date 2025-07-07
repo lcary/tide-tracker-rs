@@ -43,11 +43,7 @@ impl EinkTideRenderer {
             chart_width, chart_height, chart_x, chart_y
         );
 
-        // 1. Draw chart border - this should always work
-        eprintln!("   🔲 Drawing border...");
-        self.draw_border(buffer, chart_x, chart_y, chart_width, chart_height);
-
-        // 2. Draw basic axes - this should always work
+        // 1. Draw basic axes - clean and simple
         eprintln!("   📏 Drawing axes...");
         self.draw_simple_axes(
             buffer,
@@ -79,40 +75,6 @@ impl EinkTideRenderer {
         }
 
         eprintln!("✅ Simplified tide chart rendering complete");
-    }
-
-    /// Draw a simple border around the chart area
-    fn draw_border(&self, buffer: &mut DisplayBuffer, x: u32, y: u32, width: u32, height: u32) {
-        eprintln!("   🔲 Drawing chart border with proper spacing for labels...");
-
-        // Draw border at the edge of chart area, leaving margin space for text
-        // No inset needed - the margin already provides space for labels
-        let border_x = x;
-        let border_y = y;
-        let border_width = width;
-        let border_height = height;
-
-        // Draw rectangle border (2px thick for visibility)
-        for thickness in 0..2 {
-            // Top and bottom
-            for px in 0..border_width {
-                buffer.set_pixel(border_x + px, border_y + thickness, Color::Black);
-                buffer.set_pixel(
-                    border_x + px,
-                    border_y + border_height - 1 - thickness,
-                    Color::Black,
-                );
-            }
-            // Left and right
-            for py in 0..border_height {
-                buffer.set_pixel(border_x + thickness, border_y + py, Color::Black);
-                buffer.set_pixel(
-                    border_x + border_width - 1 - thickness,
-                    border_y + py,
-                    Color::Black,
-                );
-            }
-        }
     }
 
     /// Draw simple axes with time labels

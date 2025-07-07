@@ -553,11 +553,11 @@ fn test_eink_renderer(tide_series: &TideSeries) {
     eprintln!("   - Chart area: 360x260 pixels at (20,20)");
     eprintln!("   - X-axis labels positioned 10px below X-axis line");
     eprintln!("   - Y-axis labels positioned 40px left of Y-axis line");
-    eprintln!("   - Border drawn at chart area edges (no inset)");
+    eprintln!("   - Border removed for cleaner look and no overlap");
     eprintln!("");
     eprintln!("🔍 Key improvements:");
     eprintln!("   ✓ Increased margin from 15px to 20px for more label space");
-    eprintln!("   ✓ Removed border inset - border now at chart edge");
+    eprintln!("   ✓ Removed chart border entirely - axes provide structure");
     eprintln!("   ✓ X-axis labels moved 10px below axis (was 5px)");
     eprintln!("   ✓ Y-axis labels moved 40px left (was 35px)");
     eprintln!("   ✓ Enhanced bold text rendering for better contrast");
