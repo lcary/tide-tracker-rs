@@ -152,11 +152,6 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
         busy_pin_wrapper,
     );
 
-    // Try flag=1 for persistence (different approach)
-    // This is critical for image persistence!
-    eprintln!("🔧 Trying flag=1 for Waveshare 4.2\" B rev2.2 module (alternative approach)");
-    epd.set_flag(1);
-
     match epd.init() {
         Ok(_) => {
             eprintln!("🎉 SUCCESS! Custom E-ink display driver initialized!");
@@ -178,7 +173,8 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
     // Buffer is already initialized to white by default - no need to clear again
 
     // Choose rendering mode: true = test patterns, false = tide chart
-    let test_mode = true; // Set to true to match working static fuzz version
+    // let test_mode = true; // Back to simple test pattern that was working before
+    let test_mode = false; // Complex tide chart - let's test this on hardware!
 
     if test_mode {
         eprintln!("🧪 TEST MODE: Adding geometric test patterns...");
@@ -197,10 +193,10 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
     epd.display(display_buffer.black_buffer(), display_buffer.red_buffer())?;
     eprintln!("     ✅ epd.display() completed - data written and display turned on");
 
-    // Add a small delay to let the display finish updating before checking persistence
+    // Add a small delay to let the display finish updating
     eprintln!("     ⏱️  Waiting 3 seconds for display update to fully complete...");
     std::thread::sleep(std::time::Duration::from_secs(3));
-    eprintln!("     ⏱️  3 second wait completed - image should now be stable");
+    eprintln!("     ⏱️  3 second wait completed - image should now be stable and persistent");
 
     eprintln!("     ✅ Display function completed - using working static fuzz approach");
 
@@ -215,6 +211,11 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
     eprintln!("   Image should now be stable and persistent (no flickering)");
     eprintln!("   Press Ctrl+C to exit early");
     std::thread::sleep(std::time::Duration::from_secs(10));
+
+    // Now apply the persistence sequence when actually shutting down
+    eprintln!("🔋 Applying persistence sequence before shutdown...");
+    epd.sleep_persistent()?;
+
     eprintln!("   Program completed - image should remain on display indefinitely");
     eprintln!("   E-ink displays retain images without power after deep sleep");
 
@@ -227,16 +228,16 @@ fn render_tide_data_to_buffer(
     tide_series: &TideSeries,
     buffer: &mut tide_clock_lib::epd4in2b_v2::DisplayBuffer,
 ) {
-    eprintln!("🎨 SKIPPING tide chart rendering for now - focusing on pixel mapping tests...");
+    eprintln!("🎨 Rendering tide chart to e-ink display buffer...");
     eprintln!(
         "   📊 Tide series has {} samples",
         tide_series.samples.len()
     );
 
-    // Comment out the complex tide chart renderer while we debug pixel mapping
-    // tide_clock_lib::renderer::draw_eink_v2_custom(tide_series, buffer);
+    // Use the complex tide chart renderer for e-paper display
+    tide_clock_lib::renderer::draw_eink_v2_custom(tide_series, buffer);
 
-    eprintln!("✅ Tide chart rendering skipped - using test patterns only");
+    eprintln!("✅ Tide chart rendering completed");
 }
 
 /// Add a VERY simple test pattern for reliable debugging
@@ -244,9 +245,18 @@ fn render_tide_data_to_buffer(
 fn add_geometric_test_patterns(buffer: &mut tide_clock_lib::epd4in2b_v2::DisplayBuffer) {
     use tide_clock_lib::epd4in2b_v2::Color;
 
-    eprintln!("🎨 Adding VERY SIMPLE test pattern for basic verification...");
+    eprintln!("🎨 Adding ULTRA SIMPLE test pattern for basic verification...");
 
-    // Just a simple 5px border - THAT'S IT! (matching working static fuzz exactly)
+    // Test 1: Just fill the entire screen black to see if anything shows up
+    eprintln!("   ⬛ TEST: Filling entire screen black...");
+    for x in 0..400 {
+        for y in 0..300 {
+            buffer.set_pixel(x, y, Color::Black);
+        }
+    }
+
+    /*
+    // Alternative: Just a simple 5px border
     eprintln!("   ⬛ Drawing simple 5px border...");
     for thickness in 0..5 {
         // Top and bottom borders
@@ -260,8 +270,40 @@ fn add_geometric_test_patterns(buffer: &mut tide_clock_lib::epd4in2b_v2::Display
             buffer.set_pixel(399 - thickness, y, Color::Black); // Right border
         }
     }
+    */
 
     eprintln!("✅ Simple 5px border pattern added - should be clearly visible");
+
+    // Debug: Check if buffer actually has data
+    let black_buffer = buffer.black_buffer();
+    let red_buffer = buffer.red_buffer();
+    let mut black_pixels = 0;
+    let mut red_pixels = 0;
+
+    for &byte in black_buffer {
+        black_pixels += byte.count_zeros() as usize; // 0 bits are black pixels
+    }
+    for &byte in red_buffer {
+        red_pixels += byte.count_ones() as usize; // 1 bits are red pixels
+    }
+
+    eprintln!(
+        "   📊 Buffer contains: {} black pixels, {} red pixels",
+        black_pixels, red_pixels
+    );
+    if black_pixels == 0 && red_pixels == 0 {
+        eprintln!("   ⚠️  WARNING: Buffer appears to be empty - no pixels set!");
+    }
+
+    // Debug: Show first few bytes of buffers to verify data
+    eprintln!(
+        "   🔍 First 8 bytes of black buffer: {:02X?}",
+        &black_buffer[..8.min(black_buffer.len())]
+    );
+    eprintln!(
+        "   🔍 First 8 bytes of red buffer: {:02X?}",
+        &red_buffer[..8.min(red_buffer.len())]
+    );
 }
 
 /// Software SPI implementation using rppal GPIO bit-banging for e-ink displays
