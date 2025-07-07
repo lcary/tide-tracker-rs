@@ -51,17 +51,13 @@ impl EinkTideRenderer {
         eprintln!("   📏 Drawing axes...");
         self.draw_simple_axes(buffer, chart_x, chart_y, chart_width, chart_height);
 
-        // 3. Draw a test sine wave regardless of data - ensures we can see rendering
-        eprintln!("   📈 Drawing test wave pattern...");
-        self.draw_test_wave(buffer, chart_x, chart_y, chart_width, chart_height);
-
-        // 4. Draw current time marker (center line)
+        // 3. Draw current time marker (center line)
         eprintln!("   🕐 Drawing center time marker...");
         self.draw_center_marker(buffer, chart_x, chart_y, chart_width, chart_height);
 
-        // 5. Try to plot real data if available
+        // 4. Plot real tide data with time-based coordinates
         if !tide_series.samples.is_empty() {
-            eprintln!("   📊 Attempting to plot real tide data...");
+            eprintln!("   📊 Plotting real tide data with TIME-BASED coordinates...");
             self.plot_tide_data_simple(
                 buffer,
                 tide_series,
@@ -71,7 +67,8 @@ impl EinkTideRenderer {
                 chart_height,
             );
         } else {
-            eprintln!("   ⚠️  No tide data available - showing test pattern only");
+            eprintln!("   ⚠️  No tide data available - drawing test wave...");
+            self.draw_test_wave(buffer, chart_x, chart_y, chart_width, chart_height);
         }
 
         eprintln!("✅ Simplified tide chart rendering complete");
@@ -96,7 +93,7 @@ impl EinkTideRenderer {
         }
     }
 
-    /// Draw simple axes without complex tick marks
+    /// Draw simple axes with time labels
     fn draw_simple_axes(
         &self,
         buffer: &mut DisplayBuffer,
@@ -105,19 +102,52 @@ impl EinkTideRenderer {
         width: u32,
         height: u32,
     ) {
-        eprintln!("   📏 Drawing simple axes...");
+        eprintln!("   📏 Drawing axes with time labels...");
 
         // X-axis (bottom) - thick line
         for thickness in 0..3 {
             for px in 0..width {
-                buffer.set_pixel(x + px, y + height - 15 + thickness, Color::Black);
+                if y + height - 15 + thickness < self.height {
+                    buffer.set_pixel(x + px, y + height - 15 + thickness, Color::Black);
+                }
             }
         }
 
         // Y-axis (left) - thick line
         for thickness in 0..3 {
             for py in 0..height - 15 {
-                buffer.set_pixel(x + 15 + thickness, y + py, Color::Black);
+                if x + 15 + thickness < self.width {
+                    buffer.set_pixel(x + 15 + thickness, y + py, Color::Black);
+                }
+            }
+        }
+
+        // Add simple time markers (approximate positions)
+        // "-12h" at left edge
+        self.draw_simple_text(buffer, x + 5, y + height - 5, "-12h");
+
+        // "Now" at center
+        let center_x = x + width / 2;
+        self.draw_simple_text(buffer, center_x - 10, y + height - 5, "Now");
+
+        // "+12h" at right edge
+        self.draw_simple_text(buffer, x + width - 25, y + height - 5, "+12h");
+
+        eprintln!("   ✅ Axes with time labels drawn");
+    }
+
+    /// Draw simple text using pixel patterns (very basic)
+    fn draw_simple_text(&self, buffer: &mut DisplayBuffer, x: u32, y: u32, text: &str) {
+        // Very simple text rendering - just draw small rectangles for now
+        for (i, _ch) in text.chars().enumerate() {
+            let char_x = x + (i as u32 * 6);
+            // Draw a simple 3x5 pixel rectangle for each character
+            for dx in 0..3 {
+                for dy in 0..5 {
+                    if char_x + dx < self.width && y + dy < self.height {
+                        buffer.set_pixel(char_x + dx, y + dy, Color::Black);
+                    }
+                }
             }
         }
     }
@@ -151,25 +181,31 @@ impl EinkTideRenderer {
         }
     }
 
-    /// Draw center time marker
+    /// Draw center time marker at the "now" position (where mins_rel = 0)
     fn draw_center_marker(
         &self,
         buffer: &mut DisplayBuffer,
         x: u32,
         y: u32,
         width: u32,
-        height: u32,
+        _height: u32,
     ) {
-        eprintln!("   🕐 Drawing center marker...");
+        eprintln!("   🕐 Drawing \"now\" marker at center (mins_rel=0)...");
 
+        // Center marker should be exactly in the middle of the time span
+        // Since time goes from -720 to +720 minutes, center is at 0
         let center_x = x + width / 2;
 
-        // Draw thick red vertical line
-        for py in 20..(height - 20) {
+        // Draw thick red vertical line for "now"
+        for py in 20..(self.height - self.margin - 20) {
             for thickness in 0..4 {
-                buffer.set_pixel(center_x + thickness, y + py, Color::Red);
+                if center_x + thickness < x + width {
+                    buffer.set_pixel(center_x + thickness, y + py, Color::Red);
+                }
             }
         }
+
+        eprintln!("   ✅ \"Now\" marker drawn at x={}", center_x);
     }
 
     /// Simple tide data plotting with error handling
@@ -182,7 +218,7 @@ impl EinkTideRenderer {
         width: u32,
         height: u32,
     ) {
-        eprintln!("   📊 Simple tide data plotting...");
+        eprintln!("   📊 Simple tide data plotting with TIME-BASED coordinates...");
 
         let samples = &tide_series.samples;
         if samples.len() < 2 {
@@ -190,7 +226,7 @@ impl EinkTideRenderer {
             return;
         }
 
-        // Use all available samples for now
+        // Find tide height range (same as ASCII renderer)
         let min_height = samples
             .iter()
             .map(|s| s.tide_ft)
@@ -213,31 +249,56 @@ impl EinkTideRenderer {
             return;
         }
 
+        // Find time range (should be -720 to +720 minutes, i.e., -12h to +12h)
+        let min_time = samples.iter().map(|s| s.mins_rel).min().unwrap_or(-720);
+        let max_time = samples.iter().map(|s| s.mins_rel).max().unwrap_or(720);
+        let time_range = (max_time - min_time) as f32;
+
+        eprintln!(
+            "   🕐 Time range: {} to {} minutes ({:.1}h to {:.1}h)",
+            min_time,
+            max_time,
+            min_time as f32 / 60.0,
+            max_time as f32 / 60.0
+        );
+
         let plot_x = x + 20;
         let plot_width = width - 40;
         let plot_y = y + 20;
         let plot_height = height - 40;
 
-        // Plot first 100 samples or all if fewer (avoid overplotting)
-        let sample_count = samples.len().min(100);
+        // Plot each sample using TIME-BASED X coordinates (like ASCII renderer)
+        for sample in samples {
+            // X coordinate: map time to screen position (0 = left, plot_width = right)
+            let time_progress = (sample.mins_rel - min_time) as f32 / time_range;
+            let screen_x = plot_x + (time_progress * plot_width as f32) as u32;
 
-        for (i, sample) in samples.iter().enumerate().take(sample_count) {
-            // X coordinate: spread samples across plot width
-            let screen_x = plot_x + (i as u32 * plot_width) / sample_count as u32;
-
-            // Y coordinate: map height to screen position (flip Y axis)
+            // Y coordinate: map height to screen position (flip Y axis for screen coordinates)
             let height_progress = (sample.tide_ft - min_height) / height_range;
             let screen_y = plot_y + plot_height - (height_progress * plot_height as f32) as u32;
 
+            // Choose color: Red for "now" (mins_rel ≈ 0), Black for other times
+            let color = if sample.mins_rel.abs() <= 5 {
+                // Within 5 minutes of "now"
+                Color::Red
+            } else {
+                Color::Black
+            };
+
             // Draw bigger dots for visibility
-            for dx in 0..2 {
-                for dy in 0..2 {
+            for dx in 0..3 {
+                for dy in 0..3 {
                     if screen_x + dx < x + width && screen_y + dy < y + height {
-                        buffer.set_pixel(screen_x + dx, screen_y + dy, Color::Red);
+                        buffer.set_pixel(screen_x + dx, screen_y + dy, color);
                     }
                 }
             }
         }
+
+        eprintln!(
+            "   ✅ Plotted {} tide samples with time-based coordinates",
+            samples.len()
+        );
     }
 
     /// Plot the actual tide data as a continuous line

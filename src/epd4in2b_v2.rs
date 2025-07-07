@@ -219,22 +219,6 @@ where
         Ok(())
     }
 
-    /// Turn on display with alternative refresh command (for testing)
-    #[allow(dead_code)]
-    fn turn_on_display_alt(&mut self) -> Result<(), EpdError> {
-        eprintln!("   🔆 Turning on display (alternative method)...");
-        eprintln!("       📤 Sending 0x22 (Display Update Control 2)...");
-        self.send_command(0x22)?;
-        eprintln!("       📤 Sending 0xC7 (alternative update sequence)...");
-        self.send_data(0xC7)?; // Try 0xC7 instead of 0xF7
-        eprintln!("       📤 Sending 0x20 (Master Activation)...");
-        self.send_command(0x20)?;
-        eprintln!("       📡 Waiting for BUSY (this triggers the actual refresh)...");
-        self.read_busy()?;
-        eprintln!("   ✅ Display turned on (alternative method)");
-        Ok(())
-    }
-
     /// Initialize the display - EXACT match to C EPD_4IN2B_V2_Init() and EPD_4IN2B_V2_Init_new()
     pub fn init(&mut self) -> Result<(), EpdError> {
         eprintln!("🚀 Initializing EPD (EXACT C CODE MATCH)...");
@@ -339,13 +323,21 @@ where
             black_pixels, red_pixels
         );
 
+        // CRITICAL: Reset cursor position before sending image data (like C test sequence)
+        eprintln!("   📍 Resetting cursor position before image data...");
+        self.send_command(0x4E)?; // SET_RAM_X_ADDRESS_COUNTER
+        self.send_data(0x00)?;
+        self.send_command(0x4F)?; // SET_RAM_Y_ADDRESS_COUNTER
+        self.send_data(0x00)?;
+        self.send_data(0x00)?;
+
         // Send black buffer using 0x24 command
         eprintln!("   📝 Sending black buffer (using 0x24 command)...");
         self.send_command(0x24)?;
         thread::sleep(Duration::from_millis(10)); // Add small delay after command
         for j in 0..high {
             for i in 0..wide {
-                self.send_data(black_buffer[i + j * wide])?;
+                self.send_data(black_buffer[j * wide + i])?; // Fixed: row-major order
             }
         }
         eprintln!("   ✅ Black buffer sent successfully");
@@ -369,153 +361,6 @@ where
         eprintln!("   🔆 Turning on display...");
         self.turn_on_display()?;
         eprintln!("   ✅ Image data sent and display updated");
-
-        Ok(())
-    }
-
-    /// Display image data - alternative version without red buffer inversion (for testing)
-    #[allow(dead_code)]
-    pub fn display_alt(&mut self, black_buffer: &[u8], red_buffer: &[u8]) -> Result<(), EpdError> {
-        eprintln!("   📤 DISPLAY FUNCTION CALLED (ALTERNATIVE - no red inversion)...");
-
-        let high = self.height as usize;
-        let wide = self.width.div_ceil(8) as usize;
-
-        eprintln!(
-            "   📊 Pixel counts: {} black, {} red pixels",
-            black_buffer.iter().map(|&b| b.count_zeros()).sum::<u32>(),
-            red_buffer.iter().map(|&b| b.count_ones()).sum::<u32>()
-        );
-
-        // Send black buffer using 0x24 command
-        eprintln!("   📝 Sending black buffer (using 0x24 command)...");
-        self.send_command(0x24)?;
-        thread::sleep(Duration::from_millis(10));
-        for j in 0..high {
-            for i in 0..wide {
-                self.send_data(black_buffer[i + j * wide])?;
-            }
-        }
-        eprintln!("   ✅ Black buffer sent successfully");
-
-        // Send red buffer using 0x26 command - WITHOUT INVERSION
-        eprintln!("   🔴 Sending red buffer (using 0x26 command, NO INVERSION)...");
-        self.send_command(0x26)?;
-        thread::sleep(Duration::from_millis(10));
-        for j in 0..high {
-            for i in 0..wide {
-                self.send_data(red_buffer[i + j * wide])?; // NO inversion
-            }
-        }
-        eprintln!("   ✅ Red buffer sent successfully (no inversion)");
-
-        eprintln!("   ⏱️  Waiting 100ms before display refresh...");
-        thread::sleep(Duration::from_millis(100));
-
-        self.turn_on_display()?;
-        eprintln!("   ✅ Image data sent and display updated (alternative method)");
-        Ok(())
-    }
-
-    /// Display image data - black only version (for testing)
-    #[allow(dead_code)]
-    pub fn display_black_only(&mut self, black_buffer: &[u8]) -> Result<(), EpdError> {
-        eprintln!("   📤 DISPLAY FUNCTION CALLED (BLACK ONLY TEST)...");
-
-        let high = self.height as usize;
-        let wide = self.width.div_ceil(8) as usize;
-
-        eprintln!(
-            "   📊 Black pixels: {} pixels",
-            black_buffer.iter().map(|&b| b.count_zeros()).sum::<u32>()
-        );
-
-        // Send black buffer using 0x24 command
-        eprintln!("   📝 Sending black buffer (using 0x24 command)...");
-        self.send_command(0x24)?;
-        thread::sleep(Duration::from_millis(10));
-        for j in 0..high {
-            for i in 0..wide {
-                self.send_data(black_buffer[i + j * wide])?;
-            }
-        }
-        eprintln!("   ✅ Black buffer sent successfully");
-
-        // Send empty red buffer using 0x26 command
-        eprintln!("   🔴 Sending empty red buffer (using 0x26 command)...");
-        self.send_command(0x26)?;
-        thread::sleep(Duration::from_millis(10));
-        for _j in 0..high {
-            for _i in 0..wide {
-                self.send_data(0x00)?; // All white (no red)
-            }
-        }
-        eprintln!("   ✅ Empty red buffer sent successfully");
-
-        eprintln!("   ⏱️  Waiting 100ms before display refresh...");
-        thread::sleep(Duration::from_millis(100));
-
-        self.turn_on_display()?;
-        eprintln!("   ✅ Image data sent and display updated (black only)");
-        Ok(())
-    }
-
-    /// Display image data - EXACT C code match including red buffer inversion
-    pub fn display_c_exact(
-        &mut self,
-        black_buffer: &[u8],
-        red_buffer: &[u8],
-    ) -> Result<(), EpdError> {
-        eprintln!("   📤 DISPLAY FUNCTION CALLED (EXACT C MATCH with red inversion)...");
-
-        let high = self.height as usize;
-        let wide = self.width.div_ceil(8) as usize;
-
-        eprintln!(
-            "   📐 Display dimensions: {}x{} pixels = {} bytes per row",
-            self.width, self.height, wide
-        );
-        eprintln!(
-            "    Buffer sizes: black={} bytes, red={} bytes",
-            black_buffer.len(),
-            red_buffer.len()
-        );
-
-        // Count non-white pixels for debugging
-        let black_pixels = black_buffer.iter().map(|&b| b.count_zeros()).sum::<u32>();
-        let red_pixels = red_buffer.iter().map(|&b| b.count_ones()).sum::<u32>();
-        eprintln!(
-            "   📊 Pixel counts: {} black pixels, {} red pixels",
-            black_pixels, red_pixels
-        );
-
-        // Send black buffer using 0x24 command (matches C EPD_4IN2B_V2_Display_new)
-        eprintln!("   📝 Sending black buffer (using 0x24 command)...");
-        self.send_command(0x24)?;
-        for j in 0..high {
-            for i in 0..wide {
-                self.send_data(black_buffer[i + j * wide])?;
-            }
-        }
-        eprintln!("   ✅ Black buffer sent successfully");
-
-        // Send red buffer using 0x26 command with INVERSION (matches C code exactly)
-        eprintln!("   🔴 Sending red buffer (using 0x26 command, WITH INVERSION like C code)...");
-        self.send_command(0x26)?;
-        for j in 0..high {
-            for i in 0..wide {
-                self.send_data(!red_buffer[i + j * wide])?; // INVERT red buffer like C code: ~ryimage[i + j * Width]
-            }
-        }
-        eprintln!("   ✅ Red buffer sent successfully (with inversion like C code)");
-
-        // Turn on display (matches C code exactly)
-        eprintln!("   🔆 Turning on display (matching C code exactly)...");
-        self.send_command(0x22)?;
-        self.send_data(0xF7)?;
-        self.send_command(0x20)?;
-        self.read_busy()?;
-        eprintln!("   ✅ Image data sent and display updated (C code exact match)");
 
         Ok(())
     }
@@ -558,7 +403,7 @@ where
         self.send_command(0x24)?;
         for j in 0..high {
             for i in 0..wide {
-                self.send_data(black_buffer[i + j * wide])?;
+                self.send_data(black_buffer[j * wide + i])?; // Fixed: row-major order
             }
         }
 
@@ -567,7 +412,7 @@ where
         self.send_command(0x26)?;
         for j in 0..high {
             for i in 0..wide {
-                self.send_data(!red_buffer[i + j * wide])?; // INVERT like C
+                self.send_data(!red_buffer[j * wide + i])?; // Fixed: row-major order with inversion
             }
         }
 
@@ -582,50 +427,9 @@ where
         Ok(())
     }
 
-    /// EXPERIMENTAL: Try without any red buffer at all (pure black/white)
-    pub fn display_black_white_only(&mut self, black_buffer: &[u8]) -> Result<(), EpdError> {
-        eprintln!("   📤 DISPLAY BLACK/WHITE ONLY - no red buffer at all...");
-
-        let high = self.height as usize;
-        let wide = self.width.div_ceil(8) as usize;
-
-        let black_pixels = black_buffer.iter().map(|&b| b.count_zeros()).sum::<u32>();
-        eprintln!("   📊 Black pixels: {}", black_pixels);
-
-        // Reset cursor
-        self.send_command(0x4E)?;
-        self.send_data(0x00)?;
-        self.send_command(0x4F)?;
-        self.send_data(0x00)?;
-        self.send_data(0x00)?;
-
-        // Send black buffer
-        eprintln!("   📝 Sending black buffer...");
-        self.send_command(0x24)?;
-        for j in 0..high {
-            for i in 0..wide {
-                self.send_data(black_buffer[i + j * wide])?;
-            }
-        }
-
-        // SKIP red buffer command entirely - don't send 0x26 at all
-        eprintln!("   🔴 SKIPPING red buffer entirely (0x26 command not sent)");
-
-        // Display refresh
-        eprintln!("   🔆 Display refresh...");
-        self.send_command(0x22)?;
-        self.send_data(0xF7)?;
-        self.send_command(0x20)?;
-        self.read_busy()?;
-
-        eprintln!("   ✅ Black/white only display completed");
-        Ok(())
-    }
-
-    /// Clear the display - re-enabled for clearing previous test patterns
-    /// Note: Only use this to clear old content before rendering new content
+    /// Clear the display to remove previous content
     pub fn clear(&mut self) -> Result<(), EpdError> {
-        eprintln!("   🧹 Clearing display to remove previous content...");
+        eprintln!("   🧹 Clearing display...");
 
         let high = self.height as usize;
         let wide = self.width.div_ceil(8) as usize; // Bytes per row
@@ -639,7 +443,7 @@ where
         self.send_data(0x00)?;
 
         // Clear black buffer - send all white (0xFF)
-        eprintln!("   📝 Clearing black buffer (sending all white)...");
+        eprintln!("   📝 Clearing black buffer...");
         self.send_command(0x24)?;
         for _j in 0..high {
             for _i in 0..wide {
@@ -648,7 +452,7 @@ where
         }
 
         // Clear red buffer - send all no-red (0x00)
-        eprintln!("   🔴 Clearing red buffer (sending all no-red)...");
+        eprintln!("   🔴 Clearing red buffer...");
         self.send_command(0x26)?;
         for _j in 0..high {
             for _i in 0..wide {
@@ -657,10 +461,9 @@ where
         }
 
         // Refresh display to show the clear
-        eprintln!("   🔆 Refreshing display to show clear...");
         self.turn_on_display()?;
 
-        eprintln!("   ✅ Display cleared successfully");
+        eprintln!("   ✅ Display cleared");
         Ok(())
     }
 
@@ -674,176 +477,6 @@ where
 
         thread::sleep(Duration::from_millis(2000));
         eprintln!("   ✅ Display sleeping");
-        Ok(())
-    }
-
-    /// Power off and deep sleep sequence for persistence (CRITICAL for Rev 2.2)
-    /// This is the key missing piece from the persistence cheat sheet
-    pub fn power_off_and_deep_sleep(&mut self) -> Result<(), EpdError> {
-        eprintln!("   💤 POWER OFF AND DEEP SLEEP (CRITICAL FOR PERSISTENCE)...");
-        eprintln!("       Trying C code approach first, then cheat sheet approach");
-
-        // Step 1: POWER_OFF command
-        eprintln!("       📤 Sending 0x02 (POWER_OFF)...");
-        self.send_command(0x02)?; // POWER_OFF
-        eprintln!("       📡 Waiting for BUSY after POWER_OFF...");
-        self.read_busy()?;
-
-        // Step 2: Try C code approach first (0x10 + 0x03)
-        eprintln!("       📤 Trying C code deep sleep: 0x10 + 0x03...");
-        self.send_command(0x10)?; // DEEP_SLEEP
-        self.send_data(0x03)?; // C code uses 0x03, not 0x01
-
-        // Add a delay before checking BUSY (maybe the controller needs time)
-        eprintln!("       ⏱️  Waiting 100ms before BUSY check...");
-        thread::sleep(Duration::from_millis(100));
-
-        eprintln!("       📡 Waiting for BUSY after DEEP_SLEEP (C code approach)...");
-        match self.read_busy_with_shorter_timeout() {
-            Ok(_) => {
-                eprintln!("   ✅ C code deep sleep approach worked!");
-            }
-            Err(_) => {
-                eprintln!("   ⚠️  C code approach timed out, trying cheat sheet approach...");
-                eprintln!("       � Sending 0x10 (DEEP_SLEEP) + 0x01 (cheat sheet)...");
-                self.send_command(0x10)?; // DEEP_SLEEP
-                self.send_data(0x01)?; // Cheat sheet approach
-
-                // Try shorter timeout for cheat sheet approach
-                match self.read_busy_with_shorter_timeout() {
-                    Ok(_) => eprintln!("   ✅ Cheat sheet approach worked!"),
-                    Err(_) => {
-                        eprintln!("   ⚠️  Both approaches timed out - proceeding anyway");
-                        eprintln!("       Display may still persist despite BUSY timeout");
-                    }
-                }
-            }
-        }
-
-        eprintln!("   ✅ Power off and deep sleep completed - image should now persist!");
-        eprintln!("       The display controller is now parked safely for persistence");
-        Ok(())
-    }
-
-    /// Read busy with a shorter timeout to avoid hanging
-    fn read_busy_with_shorter_timeout(&mut self) -> Result<(), EpdError> {
-        eprintln!("   📡 Waiting for display (BUSY pin check with 2s timeout)...");
-
-        let mut count = 0;
-        while self.busy_pin.is_high()? {
-            thread::sleep(Duration::from_millis(10));
-            count += 1;
-            if count > 200 {
-                // 2 second timeout instead of 5
-                eprintln!("   ⚠️  BUSY pin timeout after 2 seconds - continuing anyway");
-                return Err(EpdError("BUSY timeout".to_string()));
-            }
-        }
-
-        eprintln!("   ✅ Display ready (BUSY went LOW after {} checks)", count);
-        Ok(())
-    }
-
-    /// EXPERIMENTAL: Try red buffer without inversion
-    pub fn display_no_red_inversion(
-        &mut self,
-        black_buffer: &[u8],
-        red_buffer: &[u8],
-    ) -> Result<(), EpdError> {
-        eprintln!("   📤 DISPLAY WITHOUT RED INVERSION - test if inversion causes flickering...");
-
-        let high = self.height as usize;
-        let wide = self.width.div_ceil(8) as usize;
-
-        let black_pixels = black_buffer.iter().map(|&b| b.count_zeros()).sum::<u32>();
-        let red_pixels = red_buffer.iter().map(|&b| b.count_ones()).sum::<u32>();
-        eprintln!(
-            "   📊 Pixel counts: {} black pixels, {} red pixels",
-            black_pixels, red_pixels
-        );
-
-        // Reset cursor
-        self.send_command(0x4E)?;
-        self.send_data(0x00)?;
-        self.send_command(0x4F)?;
-        self.send_data(0x00)?;
-        self.send_data(0x00)?;
-
-        // Send black buffer
-        eprintln!("   📝 Sending black buffer...");
-        self.send_command(0x24)?;
-        for j in 0..high {
-            for i in 0..wide {
-                self.send_data(black_buffer[i + j * wide])?;
-            }
-        }
-
-        // Send red buffer WITHOUT inversion
-        eprintln!("   🔴 Sending red buffer WITHOUT inversion...");
-        self.send_command(0x26)?;
-        for j in 0..high {
-            for i in 0..wide {
-                self.send_data(red_buffer[i + j * wide])?; // NO inversion
-            }
-        }
-
-        // Display refresh
-        eprintln!("   🔆 Display refresh...");
-        self.send_command(0x22)?;
-        self.send_data(0xF7)?;
-        self.send_command(0x20)?;
-        self.read_busy()?;
-
-        eprintln!("   ✅ No red inversion display completed");
-        Ok(())
-    }
-
-    /// EXPERIMENTAL: Create a simple fill pattern like C test does
-    pub fn display_simple_fill_test(&mut self) -> Result<(), EpdError> {
-        eprintln!("   📤 DISPLAY SIMPLE FILL TEST - like C test program...");
-
-        let high = self.height as usize;
-        let wide = self.width.div_ceil(8) as usize;
-
-        // Reset cursor (critical!)
-        eprintln!("   📍 Resetting cursor position...");
-        self.send_command(0x4E)?;
-        self.send_data(0x00)?;
-        self.send_command(0x4F)?;
-        self.send_data(0x00)?;
-        self.send_data(0x00)?;
-
-        // Create a simple pattern: alternating stripes
-        eprintln!("   📝 Creating alternating stripe pattern...");
-        self.send_command(0x24)?;
-        for j in 0..high {
-            for _i in 0..wide {
-                // Create alternating stripes: every 4th row is black
-                if (j / 4) % 2 == 0 {
-                    self.send_data(0x00)?; // Black stripe
-                } else {
-                    self.send_data(0xFF)?; // White stripe
-                }
-            }
-        }
-
-        // Send minimal red buffer (all white)
-        eprintln!("   🔴 Sending minimal red buffer...");
-        self.send_command(0x26)?;
-        for _j in 0..high {
-            for _i in 0..wide {
-                self.send_data(0x00)?; // No red
-            }
-        }
-
-        // Display refresh
-        eprintln!("   🔆 Display refresh...");
-        self.send_command(0x22)?;
-        self.send_data(0xF7)?;
-        self.send_command(0x20)?;
-        self.read_busy()?;
-
-        eprintln!("   ✅ Simple fill test completed");
         Ok(())
     }
 }

@@ -334,17 +334,8 @@ sudo systemctl status tide-tracker.service
 
 ### E-ink Display Issues
 ```bash
-# Check SPI, expect 0 and 1
-ls /dev/spi*
-
 # Test GPIO pins
 pinctrl get
-
-# Test display with current configuration
-./scripts/test_display.sh
-
-# Check configuration is loaded correctly  
-cargo run --bin tide-tracker --release -- --stdout | head -3
 ```
 
 **Hardware Pin Conflicts:**

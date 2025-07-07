@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Tide Tracker Team"]
 description = "A lean Rust tide tracker for Raspberry Pi Zero 2 W with e-ink display"
-license = "Apache-2.0"
+license = "MIT"
 
 [features]
 default = []
