@@ -33,8 +33,18 @@ BIN_DEST="/usr/local/bin/tide-tracker"
 CFG_DIR="/etc/tide-tracker"
 CFG_DEST="$CFG_DIR/tide-config.toml"
 SERVICE_FILE="/etc/systemd/system/tide-tracker.service"
+TIMER_FILE="/etc/systemd/system/tide-tracker.timer"
 FULL_REFRESH_SVC="/etc/systemd/system/tide-midnight-refresh.service"
 FULL_REFRESH_TIMER="/etc/systemd/system/tide-midnight-refresh.timer"
+
+# Detect the user who should run the service (not root)
+if [[ "$SUDO_USER" ]]; then
+    SERVICE_USER="$SUDO_USER"
+else
+    SERVICE_USER="$(logname 2>/dev/null || echo pi)"
+fi
+
+echo "Installing tide-tracker to run as user: $SERVICE_USER"
 
 ### ──────────────────────────
 ### 1. Install binary & config
@@ -43,28 +53,56 @@ install -Dm755 "$BIN_SRC" "$BIN_DEST"
 install -Dm644 "$CFG_SRC" "$CFG_DEST"
 
 ### ──────────────────────────
-### 2. systemd service (boot & self-heal)
+### 2. systemd service & timer (every 10 minutes)
 ### ──────────────────────────
-if [[ ! -f "$SERVICE_FILE" ]]; then
+# Always recreate service file to ensure proper configuration
 cat <<EOF >"$SERVICE_FILE"
 [Unit]
-Description=Tide Tracker e-paper display
+Description=Tide Tracker e-paper display update
 After=network-online.target
+Wants=network-online.target
 
 [Service]
+Type=oneshot
 ExecStart=$BIN_DEST
 WorkingDirectory=$CFG_DIR
 Environment=RUST_LOG=info
-Restart=always
-RestartSec=5
-User=pi
+Environment=RUST_BACKTRACE=1
+User=$SERVICE_USER
+Group=$SERVICE_USER
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tide-tracker
+
+# Allow GPIO access
+SupplementaryGroups=gpio spi
+
+# Security (but allow GPIO access)
+NoNewPrivileges=false
+ProtectSystem=false
+ProtectHome=true
+PrivateTmp=true
+EOF
+
+# Always recreate timer file to ensure proper configuration
+cat <<EOF >"$TIMER_FILE"
+[Unit]
+Description=Update tide tracker every 10 minutes
+Requires=tide-tracker.service
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+AccuracySec=1min
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=timers.target
 EOF
-  systemctl daemon-reload
-  systemctl enable tide-tracker.service
-fi
+
+# Reload and enable
+systemctl daemon-reload
+systemctl enable tide-tracker.service
+systemctl enable tide-tracker.timer
 
 ### ──────────────────────────
 ### 3. Midnight full-refresh timer
@@ -78,7 +116,7 @@ Description=Full e-paper refresh at midnight
 Type=oneshot
 ExecStart=$BIN_DEST --full-refresh
 WorkingDirectory=$CFG_DIR
-User=pi
+User=$SERVICE_USER
 EOF
 fi
 

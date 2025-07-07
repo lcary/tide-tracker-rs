@@ -376,10 +376,10 @@ valgrind --leak-check=full ./target/release/tide-tracker --stdout
 - [x] Support configuration file loading
 - [x] Test rendering (Waveshare e-Paper)
 - [x] Fix persistence (e-Paper)
-- [ ] Fix mangled simple chart data (e-Paper)
-- [ ] Test actual chart rendering (e-Paper)
+- [x] Fix mangled simple chart data (e-Paper)
+- [x] Test actual chart rendering (e-Paper)
 - [ ] Replace deprecated rppal with gpio-cdev (or pull in rppal code)
-- [ ] Set up cronjob/svc
-- [ ] Test Pi device restart resilience
+- [x] Set up cronjob/svc
+- [x] Test Pi device restart resilience
 - [ ] Build and install in frame
 - [ ] Support automatic config creation w/ location check
