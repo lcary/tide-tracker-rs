@@ -219,6 +219,22 @@ where
         Ok(())
     }
 
+    /// Turn on display with alternative refresh command (for testing)
+    #[allow(dead_code)]
+    fn turn_on_display_alt(&mut self) -> Result<(), EpdError> {
+        eprintln!("   🔆 Turning on display (alternative method)...");
+        eprintln!("       📤 Sending 0x22 (Display Update Control 2)...");
+        self.send_command(0x22)?;
+        eprintln!("       📤 Sending 0xC7 (alternative update sequence)...");
+        self.send_data(0xC7)?; // Try 0xC7 instead of 0xF7
+        eprintln!("       📤 Sending 0x20 (Master Activation)...");
+        self.send_command(0x20)?;
+        eprintln!("       📡 Waiting for BUSY (this triggers the actual refresh)...");
+        self.read_busy()?;
+        eprintln!("   ✅ Display turned on (alternative method)");
+        Ok(())
+    }
+
     /// Initialize the display
     pub fn init(&mut self) -> Result<(), EpdError> {
         eprintln!("🚀 Initializing EPD...");
@@ -272,7 +288,7 @@ where
         eprintln!("   📤 DISPLAY FUNCTION CALLED - sending image data to display...");
 
         let high = self.height as usize;
-        let wide = ((self.width + 7) / 8) as usize; // Bytes per row (ceiling division)
+        let wide = self.width.div_ceil(8) as usize; // Bytes per row (ceiling division)
 
         eprintln!(
             "   📐 Display dimensions: {}x{} pixels = {} bytes per row",
@@ -293,22 +309,30 @@ where
         );
 
         // Send black buffer using 0x24 command
-        eprintln!("   � Sending black buffer (using 0x24 command)...");
+        eprintln!("   📝 Sending black buffer (using 0x24 command)...");
         self.send_command(0x24)?;
+        thread::sleep(Duration::from_millis(10)); // Add small delay after command
         for j in 0..high {
             for i in 0..wide {
                 self.send_data(black_buffer[i + j * wide])?;
             }
         }
+        eprintln!("   ✅ Black buffer sent successfully");
 
         // Send red buffer using 0x26 command
         eprintln!("   🔴 Sending red buffer (using 0x26 command)...");
         self.send_command(0x26)?;
+        thread::sleep(Duration::from_millis(10)); // Add small delay after command
         for j in 0..high {
             for i in 0..wide {
                 self.send_data(!red_buffer[i + j * wide])?; // Inverted as per C code
             }
         }
+        eprintln!("   ✅ Red buffer sent successfully");
+
+        // Wait before refresh to ensure data is stable
+        eprintln!("   ⏱️  Waiting 100ms before display refresh...");
+        thread::sleep(Duration::from_millis(100));
 
         // Turn on display to show the new image
         eprintln!("   🔆 Turning on display...");
@@ -318,8 +342,104 @@ where
         Ok(())
     }
 
-    /// Clear the display
+    /// Display image data - alternative version without red buffer inversion (for testing)
+    #[allow(dead_code)]
+    pub fn display_alt(&mut self, black_buffer: &[u8], red_buffer: &[u8]) -> Result<(), EpdError> {
+        eprintln!("   📤 DISPLAY FUNCTION CALLED (ALTERNATIVE - no red inversion)...");
+
+        let high = self.height as usize;
+        let wide = self.width.div_ceil(8) as usize;
+
+        eprintln!(
+            "   📊 Pixel counts: {} black, {} red pixels",
+            black_buffer.iter().map(|&b| b.count_zeros()).sum::<u32>(),
+            red_buffer.iter().map(|&b| b.count_ones()).sum::<u32>()
+        );
+
+        // Send black buffer using 0x24 command
+        eprintln!("   📝 Sending black buffer (using 0x24 command)...");
+        self.send_command(0x24)?;
+        thread::sleep(Duration::from_millis(10));
+        for j in 0..high {
+            for i in 0..wide {
+                self.send_data(black_buffer[i + j * wide])?;
+            }
+        }
+        eprintln!("   ✅ Black buffer sent successfully");
+
+        // Send red buffer using 0x26 command - WITHOUT INVERSION
+        eprintln!("   🔴 Sending red buffer (using 0x26 command, NO INVERSION)...");
+        self.send_command(0x26)?;
+        thread::sleep(Duration::from_millis(10));
+        for j in 0..high {
+            for i in 0..wide {
+                self.send_data(red_buffer[i + j * wide])?; // NO inversion
+            }
+        }
+        eprintln!("   ✅ Red buffer sent successfully (no inversion)");
+
+        eprintln!("   ⏱️  Waiting 100ms before display refresh...");
+        thread::sleep(Duration::from_millis(100));
+
+        self.turn_on_display()?;
+        eprintln!("   ✅ Image data sent and display updated (alternative method)");
+        Ok(())
+    }
+
+    /// Display image data - black only version (for testing)
+    #[allow(dead_code)]
+    pub fn display_black_only(&mut self, black_buffer: &[u8]) -> Result<(), EpdError> {
+        eprintln!("   📤 DISPLAY FUNCTION CALLED (BLACK ONLY TEST)...");
+
+        let high = self.height as usize;
+        let wide = self.width.div_ceil(8) as usize;
+
+        eprintln!(
+            "   📊 Black pixels: {} pixels",
+            black_buffer.iter().map(|&b| b.count_zeros()).sum::<u32>()
+        );
+
+        // Send black buffer using 0x24 command
+        eprintln!("   📝 Sending black buffer (using 0x24 command)...");
+        self.send_command(0x24)?;
+        thread::sleep(Duration::from_millis(10));
+        for j in 0..high {
+            for i in 0..wide {
+                self.send_data(black_buffer[i + j * wide])?;
+            }
+        }
+        eprintln!("   ✅ Black buffer sent successfully");
+
+        // Send empty red buffer using 0x26 command
+        eprintln!("   🔴 Sending empty red buffer (using 0x26 command)...");
+        self.send_command(0x26)?;
+        thread::sleep(Duration::from_millis(10));
+        for _j in 0..high {
+            for _i in 0..wide {
+                self.send_data(0x00)?; // All white (no red)
+            }
+        }
+        eprintln!("   ✅ Empty red buffer sent successfully");
+
+        eprintln!("   ⏱️  Waiting 100ms before display refresh...");
+        thread::sleep(Duration::from_millis(100));
+
+        self.turn_on_display()?;
+        eprintln!("   ✅ Image data sent and display updated (black only)");
+        Ok(())
+    }
+
+    /// Clear the display - DISABLED per persistence "cheat sheet"
+    /// "Comment out / delete every call to Clear(), DEINIT() or init() that runs after the first successful frame"
+    #[allow(dead_code)]
     pub fn clear(&mut self) -> Result<(), EpdError> {
+        eprintln!("   ⚠️  CLEAR() DISABLED - this method can break persistence!");
+        eprintln!("   ⚠️  Per cheat sheet: never call Clear() after first successful frame");
+        Err(EpdError(
+            "Clear() disabled to prevent breaking persistence".to_string(),
+        ))
+
+        /* ORIGINAL CLEAR CODE - DISABLED FOR PERSISTENCE
         eprintln!("   🧹 Clearing display...");
 
         let high = self.height as usize;
@@ -347,66 +467,19 @@ where
 
         eprintln!("   ✅ Display cleared");
         Ok(())
+        */
     }
 
-    /// Put display to sleep with proper persistence (follows the "cheat sheet")
-    /// This should only be called when actually shutting down the device
-    pub fn sleep_persistent(&mut self) -> Result<(), EpdError> {
-        eprintln!("   😴 Putting display to sleep with persistence sequence...");
-
-        // First send POWER_OFF and wait for BUSY
-        eprintln!("   📤 Sending POWER_OFF (0x02)...");
-        self.send_command(0x02)?; // POWER_OFF
-        self.read_busy()?;
-
-        // Then send DEEP_SLEEP with the critical 0x01 byte for persistence
-        eprintln!("   😴 Sending DEEP_SLEEP (0x10) with 0x01 for persistence...");
-        self.send_command(0x10)?; // DEEP_SLEEP
-        self.send_data(0x01)?; // The critical 0x01 byte for persistence
-        self.read_busy()?;
-
-        eprintln!("   ✅ Display in persistent sleep mode - image should survive power-off");
-        Ok(())
-    }
-
-    /// Put display to sleep (standard approach, matches C code)
+    /// Put display to sleep (standard approach, matches C code exactly)
+    /// This should only be called when actually powering down the device
     pub fn sleep(&mut self) -> Result<(), EpdError> {
         eprintln!("   😴 Putting display to sleep...");
 
         self.send_command(0x10)?; // Deep sleep mode
-        self.send_data(0x03)?; // Standard sleep data
+        self.send_data(0x03)?; // Standard sleep data (matches C code)
 
         thread::sleep(Duration::from_millis(2000));
         eprintln!("   ✅ Display sleeping");
-        Ok(())
-    }
-
-    /// Display image data with persistence support - follows the "cheat sheet" guidelines
-    /// After display(), sends POWER_OFF (0x02), waits for BUSY, then DEEP_SLEEP (0x10) with 0x01
-    pub fn display_persistent(
-        &mut self,
-        black_buffer: &[u8],
-        red_buffer: &[u8],
-    ) -> Result<(), EpdError> {
-        // First, do the normal display
-        self.display(black_buffer, red_buffer)?;
-
-        // Now implement the persistence "cheat sheet":
-        // After every display(), send POWER_OFF (0x02), wait for BUSY, then DEEP_SLEEP (0x10) with 0x01, wait for BUSY
-        eprintln!("   🔋 Applying persistence sequence...");
-
-        eprintln!("   📤 Sending POWER_OFF (0x02)...");
-        self.send_command(0x02)?; // POWER_OFF
-        eprintln!("   📡 Waiting for BUSY after POWER_OFF...");
-        self.read_busy()?;
-
-        eprintln!("   😴 Sending DEEP_SLEEP (0x10) with 0x01...");
-        self.send_command(0x10)?; // DEEP_SLEEP
-        self.send_data(0x01)?; // The critical 0x01 byte for persistence
-        eprintln!("   📡 Waiting for BUSY after DEEP_SLEEP...");
-        self.read_busy()?;
-
-        eprintln!("   ✅ Persistence sequence complete - image should persist after power-off");
         Ok(())
     }
 }

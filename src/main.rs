@@ -198,32 +198,24 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
     std::thread::sleep(std::time::Duration::from_secs(3));
     eprintln!("     ⏱️  3 second wait completed - image should now be stable and persistent");
 
-    eprintln!("     ✅ Display function completed - using working static fuzz approach");
-
-    // CRITICAL: Remove the 2 second delay from C test examples
-    // The working static fuzz version did NOT have this delay
-
-    // CRITICAL: DO NOT call sleep() - this was the key to the working static fuzz version
-    // epd.sleep()?; // Commented out - the working version did NOT call sleep!
+    eprintln!("     ✅ Display function completed");
 
     eprintln!("✅ E-ink display updated successfully (image should persist)"); // Keep the program running briefly to verify persistence
-    eprintln!("🕐 Keeping program running for 10 seconds to verify image persistence...");
+    eprintln!("🕐 Keeping program running for 30 seconds to verify image persistence...");
     eprintln!("   Image should now be stable and persistent (no flickering)");
     eprintln!("   Press Ctrl+C to exit early");
-    std::thread::sleep(std::time::Duration::from_secs(10));
+    std::thread::sleep(std::time::Duration::from_secs(30));
 
-    // Now apply the persistence sequence when actually shutting down
-    eprintln!("🔋 Applying persistence sequence before shutdown...");
-    epd.sleep_persistent()?;
-
+    // DON'T call any sleep methods - let the image persist naturally
     eprintln!("   Program completed - image should remain on display indefinitely");
-    eprintln!("   E-ink displays retain images without power after deep sleep");
+    eprintln!("   E-ink displays retain images without any power management commands");
 
     Ok(())
 }
 
 /// Render actual tide data to the display buffer using the full chart renderer
 #[cfg(all(target_os = "linux", feature = "hardware"))]
+#[allow(dead_code)]
 fn render_tide_data_to_buffer(
     tide_series: &TideSeries,
     buffer: &mut tide_clock_lib::epd4in2b_v2::DisplayBuffer,
@@ -369,7 +361,7 @@ impl RppalSoftwareSpi {
 
         // Note: CS pin is controlled by the EPD driver, not here
 
-        let mut result = 0u8;
+        let mut _result = 0u8;
 
         // Read 8 bits, MSB first (dummy implementation - just return 0x00 for now)
         for _i in (0..8).rev() {
@@ -381,7 +373,7 @@ impl RppalSoftwareSpi {
             self.sclk_pin.set_low();
 
             // Shift result (dummy read - no actual MISO pin)
-            result <<= 1;
+            _result <<= 1;
         }
 
         // Small delay between bytes
@@ -512,7 +504,6 @@ fn main() -> anyhow::Result<()> {
             hw.busy_pin,
             gpio_to_pin(hw.busy_pin)
         );
-        eprintln!("");
 
         // Initialize e-ink display with configured GPIO pins
         match initialize_eink_display(&tide_series, &config) {
