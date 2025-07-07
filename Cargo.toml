@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Tide Tracker Team"]
 description = "A lean Rust tide tracker for Raspberry Pi Zero 2 W with e-ink display"
-license = "MIT OR Apache-2.0"
+license = "Apache-2.0"
 
 [features]
 default = []
@@ -13,8 +13,6 @@ hardware = ["embedded-hal", "embedded-hal-bus", "rppal"]
 [[bin]]
 name = "tide-tracker"
 path = "src/main.rs"
-
-
 
 [lib]
 name = "tide_clock_lib"
@@ -39,8 +37,6 @@ embedded-hal-bus = { version = "0.3", optional = true }
 # Platform-specific dependencies - only compile on Linux ARM targets
 [target.'cfg(target_os = "linux")'.dependencies]
 rppal = { version = "0.17", optional = true, features = [] }
-
-
 
 [dev-dependencies]
 tempfile = "3.8"

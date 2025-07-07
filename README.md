@@ -135,27 +135,7 @@ cd tide-tracker
 cargo build --release
 ```
 
-### 3. Test E-ink Display (Optional)
-Before running the main application, verify your e-ink display works:
-
-```bash
-# Quick test suite (Python + Rust)
-./scripts/test_display.sh
-
-# Python version (requires: pip3 install waveshare-epd pillow)
-python3 scripts/test_display.py
-
-# Rust version (uses same hardware libraries as main app)
-cargo run --bin test_display --features hardware --release
-```
-
-These test scripts will:
-- ✅ Check SPI connectivity
-- 🎨 Display test patterns and text  
-- 🧹 Clear the display
-- 💤 Put display to sleep properly
-
-### 4. Test Installation
+### 3. Test Installation
 ```bash
 # Test with ASCII output (no hardware required)
 cargo run --release -- --stdout
@@ -302,7 +282,6 @@ busy_pin = 24
 **Important Notes:**
 - Ensure your physical wiring matches your configuration
 - Changes require restarting the tide-tracker service
-- Test with `./scripts/test_display.sh` after making changes
 - The configuration is loaded from the current directory's `tide-config.toml`
 
 ### Tide Station
