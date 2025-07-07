@@ -221,9 +221,7 @@ impl EinkTideRenderer {
         // Plot first 100 samples or all if fewer (avoid overplotting)
         let sample_count = samples.len().min(100);
 
-        for i in 0..sample_count {
-            let sample = &samples[i];
-
+        for (i, sample) in samples.iter().enumerate().take(sample_count) {
             // X coordinate: spread samples across plot width
             let screen_x = plot_x + (i as u32 * plot_width) / sample_count as u32;
 
@@ -243,6 +241,7 @@ impl EinkTideRenderer {
     }
 
     /// Plot the actual tide data as a continuous line
+    #[allow(dead_code)]
     fn plot_tide_data(
         &self,
         buffer: &mut DisplayBuffer,
@@ -332,6 +331,7 @@ impl EinkTideRenderer {
     }
 
     /// Draw current time marker (red vertical line)
+    #[allow(dead_code)]
     fn draw_current_time_marker(
         &self,
         buffer: &mut DisplayBuffer,
@@ -358,6 +358,7 @@ impl EinkTideRenderer {
     }
 
     /// Add simple text labels
+    #[allow(dead_code)]
     fn draw_labels(&self, buffer: &mut DisplayBuffer, x: u32, y: u32, width: u32, height: u32) {
         eprintln!("   🏷️  Drawing labels...");
 
@@ -376,6 +377,7 @@ impl EinkTideRenderer {
     }
 
     /// Simple line drawing using Bresenham's algorithm
+    #[allow(dead_code)]
     fn draw_line(&self, buffer: &mut DisplayBuffer, x0: u32, y0: u32, x1: u32, y1: u32) {
         let mut x0 = x0 as i32;
         let mut y0 = y0 as i32;
@@ -407,5 +409,11 @@ impl EinkTideRenderer {
                 y0 += sy;
             }
         }
+    }
+}
+
+impl Default for EinkTideRenderer {
+    fn default() -> Self {
+        Self::new()
     }
 }

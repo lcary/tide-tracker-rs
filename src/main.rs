@@ -21,6 +21,7 @@ use tide_clock_lib::{fallback, renderer::draw_ascii, tide_data};
 
 /// Convert GPIO number to physical pin number for display
 /// This is a simplified mapping for common pins
+#[allow(dead_code)]
 fn gpio_to_pin(gpio: u32) -> u32 {
     match gpio {
         8 => 24,  // CS
@@ -494,10 +495,12 @@ fn main() -> anyhow::Result<()> {
     #[cfg(not(target_os = "linux"))]
     {
         eprintln!("Hardware mode is only available on Linux. Use --stdout for development mode.");
+        #[allow(unreachable_code)]
         return Err(anyhow::anyhow!(
             "Hardware mode not supported on this platform"
         ));
     }
 
+    #[allow(unreachable_code)]
     Ok(())
 }

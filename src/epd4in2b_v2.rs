@@ -70,7 +70,7 @@ pub struct DisplayBuffer {
 impl DisplayBuffer {
     pub fn new(width: u32, height: u32) -> Self {
         // Buffer size: each row has (width+7)/8 bytes, total height rows
-        let bytes_per_row = (width + 7) / 8;
+        let bytes_per_row = width.div_ceil(8);
         let buffer_size = (bytes_per_row * height) as usize;
         Self {
             width,
@@ -112,7 +112,7 @@ impl DisplayBuffer {
 
         // E-ink displays are organized as rows of bytes
         // Each row has (width/8) bytes, each byte represents 8 horizontal pixels
-        let bytes_per_row = (self.width + 7) / 8; // Round up for partial bytes
+        let bytes_per_row = self.width.div_ceil(8); // Round up for partial bytes
         let byte_index = (y * bytes_per_row + x / 8) as usize;
         let bit_mask = 0x80 >> (x % 8);
 
@@ -342,7 +342,7 @@ where
         eprintln!("       This should only be called ONCE to avoid flickering");
 
         let high = self.height as usize;
-        let wide = ((self.width + 7) / 8) as usize; // Bytes per row
+        let wide = self.width.div_ceil(8) as usize; // Bytes per row
 
         eprintln!(
             "   📐 Display dimensions: {}x{} pixels = {} bytes per row",
@@ -407,7 +407,7 @@ where
         eprintln!("   🧹 Clearing display...");
 
         let high = self.height as usize;
-        let wide = ((self.width + 7) / 8) as usize; // Bytes per row
+        let wide = self.width.div_ceil(8) as usize; // Bytes per row
 
         // ALWAYS use 0x24/0x26 commands (flag=0) for newer modules
         self.send_command(0x24)?;

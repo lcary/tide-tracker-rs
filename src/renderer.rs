@@ -229,7 +229,6 @@ pub fn draw_eink(series: &TideSeries, display: &mut epd_waveshare::epd4in2::Disp
     }
 }
 */
-
 /// Render tide data to e-ink display (4.2" b/w/red v2).
 /// This function accepts a TideSeries for comprehensive display.
 /// Updated to use our custom EPD implementation.
@@ -343,7 +342,7 @@ pub fn draw_eink_v2_custom(series: &TideSeries, display: &mut crate::epd4in2b_v2
     // Time axis markers
     let time_label_count = 5; // -12h, -6h, Now, +6h, +12h
     for i in 0..time_label_count {
-        let x = chart_left + (i * chart_width / (time_label_count - 1).max(1)) as u32;
+        let x = chart_left + (i * chart_width / (time_label_count - 1).max(1));
 
         // Vertical tick marks
         for y in (chart_top + chart_height)..(chart_top + chart_height + 10) {
