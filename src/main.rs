@@ -181,25 +181,88 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
         add_geometric_test_patterns(&mut display_buffer);
     } else {
         eprintln!("📊 CHART MODE: Rendering tide chart...");
+
+        // First, clear the display to remove any previous content (like alternating stripes)
+        eprintln!("🧹 Clearing display to remove previous content...");
+        epd.clear()?;
+        eprintln!("✅ Display cleared successfully");
+
         let renderer = tide_clock_lib::eink_renderer::EinkTideRenderer::new();
         renderer.render_chart(&mut display_buffer, tide_series);
+
+        // Debug: Check what we actually rendered
+        let black_pixels = display_buffer
+            .black_buffer()
+            .iter()
+            .map(|&b| b.count_zeros())
+            .sum::<u32>();
+        let red_pixels = display_buffer
+            .red_buffer()
+            .iter()
+            .map(|&b| b.count_ones())
+            .sum::<u32>();
+        eprintln!(
+            "📊 Rendered buffer: {} black pixels, {} red pixels",
+            black_pixels, red_pixels
+        );
+
+        // Sample a few bytes from the middle of the buffer to verify content
+        let mid_offset = display_buffer.black_buffer().len() / 2;
+        eprintln!(
+            "📊 Buffer sample (middle): black={:02X} {:02X} {:02X}, red={:02X} {:02X} {:02X}",
+            display_buffer.black_buffer().get(mid_offset).unwrap_or(&0),
+            display_buffer
+                .black_buffer()
+                .get(mid_offset + 1)
+                .unwrap_or(&0),
+            display_buffer
+                .black_buffer()
+                .get(mid_offset + 2)
+                .unwrap_or(&0),
+            display_buffer.red_buffer().get(mid_offset).unwrap_or(&0),
+            display_buffer
+                .red_buffer()
+                .get(mid_offset + 1)
+                .unwrap_or(&0),
+            display_buffer
+                .red_buffer()
+                .get(mid_offset + 2)
+                .unwrap_or(&0)
+        );
+
+        // Check if the buffer looks inverted (if all bytes are 0xFF, it means white background)
+        let first_few_black =
+            &display_buffer.black_buffer()[..16.min(display_buffer.black_buffer().len())];
+        let all_ff = first_few_black.iter().all(|&b| b == 0xFF);
+        if all_ff {
+            eprintln!(
+                "⚠️  WARNING: Buffer appears to be all 0xFF (white) - may need bit inversion"
+            );
+        }
     }
 
     eprintln!("📤 Updating e-ink display...");
     eprintln!("     ⚠️  This should be called EXACTLY ONCE to avoid flickering");
 
-    // Since black-only mode shows nothing, try simpler approaches
-    eprintln!("     🧪 EXPERIMENTAL: Trying simple fill test (alternating stripes)...");
-    epd.display_simple_fill_test()?;
-    eprintln!("     ✅ Simple fill test completed");
+    // Try the normal display method first since we cleared the display
+    eprintln!("     🎨 Trying normal display method after clear...");
+    match epd.display(display_buffer.black_buffer(), display_buffer.red_buffer()) {
+        Ok(_) => {
+            eprintln!("     ✅ Normal display method completed successfully");
+        }
+        Err(e) => {
+            eprintln!("     ⚠️  Normal display failed: {:?}", e);
+            eprintln!("     🔄 Falling back to C test sequence...");
+            epd.display_c_test_sequence(
+                display_buffer.black_buffer(),
+                display_buffer.red_buffer(),
+            )?;
+            eprintln!("     ✅ C test sequence fallback completed");
+        }
+    }
 
-    // If that works, we can try the full C test sequence next
-    // eprintln!("     🧪 EXPERIMENTAL: Trying C test sequence...");
-    // epd.display_c_test_sequence(display_buffer.black_buffer(), display_buffer.red_buffer())?;
-    // eprintln!("     ✅ C test sequence completed");
-
-    // SKIP power-off for now to isolate the display issue
-    eprintln!("     ⚠️  SKIPPING power-off sequence to isolate display flickering issue");
+    // SKIP power-off for now since basic persistence works
+    eprintln!("     ⚠️  SKIPPING power-off sequence since basic persistence is working");
 
     eprintln!("     ✅ Display function completed");
 

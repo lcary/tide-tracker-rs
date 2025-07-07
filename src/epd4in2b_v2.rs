@@ -622,23 +622,24 @@ where
         Ok(())
     }
 
-    /// Clear the display - DISABLED per persistence "cheat sheet"
-    /// "Comment out / delete every call to Clear(), DEINIT() or init() that runs after the first successful frame"
-    #[allow(dead_code)]
+    /// Clear the display - re-enabled for clearing previous test patterns
+    /// Note: Only use this to clear old content before rendering new content
     pub fn clear(&mut self) -> Result<(), EpdError> {
-        eprintln!("   ⚠️  CLEAR() DISABLED - this method can break persistence!");
-        eprintln!("   ⚠️  Per cheat sheet: never call Clear() after first successful frame");
-        Err(EpdError(
-            "Clear() disabled to prevent breaking persistence".to_string(),
-        ))
-
-        /* ORIGINAL CLEAR CODE - DISABLED FOR PERSISTENCE
-        eprintln!("   🧹 Clearing display...");
+        eprintln!("   🧹 Clearing display to remove previous content...");
 
         let high = self.height as usize;
         let wide = self.width.div_ceil(8) as usize; // Bytes per row
 
-        // Use 0x24/0x26 commands
+        // Reset cursor position first
+        eprintln!("   📍 Resetting cursor position...");
+        self.send_command(0x4E)?; // SET_RAM_X_ADDRESS_COUNTER
+        self.send_data(0x00)?;
+        self.send_command(0x4F)?; // SET_RAM_Y_ADDRESS_COUNTER
+        self.send_data(0x00)?;
+        self.send_data(0x00)?;
+
+        // Clear black buffer - send all white (0xFF)
+        eprintln!("   📝 Clearing black buffer (sending all white)...");
         self.send_command(0x24)?;
         for _j in 0..high {
             for _i in 0..wide {
@@ -646,6 +647,8 @@ where
             }
         }
 
+        // Clear red buffer - send all no-red (0x00)
+        eprintln!("   🔴 Clearing red buffer (sending all no-red)...");
         self.send_command(0x26)?;
         for _j in 0..high {
             for _i in 0..wide {
@@ -653,14 +656,12 @@ where
             }
         }
 
+        // Refresh display to show the clear
+        eprintln!("   🔆 Refreshing display to show clear...");
         self.turn_on_display()?;
 
-        // Wait for display refresh to complete
-        self.read_busy()?;
-
-        eprintln!("   ✅ Display cleared");
+        eprintln!("   ✅ Display cleared successfully");
         Ok(())
-        */
     }
 
     /// Put display to sleep (standard approach, matches C code exactly)
