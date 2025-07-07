@@ -153,7 +153,7 @@ where
         }
     }
 
-    /// Hardware reset - follows Python reset() exactly
+    /// Hardware reset - follows C reset() exactly
     fn reset(&mut self) -> Result<(), EpdError> {
         eprintln!("🔄 Performing hardware reset...");
 
@@ -161,7 +161,7 @@ where
         thread::sleep(Duration::from_millis(200));
 
         self.rst_pin.set_low()?;
-        thread::sleep(Duration::from_millis(5));
+        thread::sleep(Duration::from_millis(2)); // C code uses 2ms, not 5ms
 
         self.rst_pin.set_high()?;
         thread::sleep(Duration::from_millis(200));
@@ -235,51 +235,82 @@ where
         Ok(())
     }
 
-    /// Initialize the display
+    /// Initialize the display - EXACT match to C EPD_4IN2B_V2_Init() and EPD_4IN2B_V2_Init_new()
     pub fn init(&mut self) -> Result<(), EpdError> {
-        eprintln!("🚀 Initializing EPD...");
+        eprintln!("🚀 Initializing EPD (EXACT C CODE MATCH)...");
 
-        // Step 1: Hardware reset
+        // Step 1: Hardware reset (matches C code exactly)
         self.reset()?;
 
-        // Step 2: Software reset and configuration (following C code)
-        self.read_busy()?;
-        self.send_command(0x12)?; // SWRESET
+        // Step 2: Hardware revision detection sequence (matches C EPD_4IN2B_V2_Init() exactly)
+        eprintln!("   🔍 Hardware revision detection (matching C code exactly)...");
+        self.dc_pin.set_low()?; // Command mode
+        self.cs_pin.set_low()?; // Select device
+        self.spi.write_byte(0x2F)?; // Send detection command (matches C code)
+        self.cs_pin.set_high()?; // Deselect device
+        thread::sleep(Duration::from_millis(50)); // DEV_Delay_ms(50) from C code
+
+        // Try to read response (matches C code: i = DEV_SPI_ReadData())
+        self.dc_pin.set_high()?; // Data mode
+        self.cs_pin.set_low()?; // Select device
+        match self.spi.read_byte() {
+            Ok(revision) => eprintln!("   📄 Hardware revision byte: 0x{:02X}", revision),
+            Err(_) => {
+                eprintln!("   📄 Hardware revision read failed (this is normal for some setups)")
+            }
+        }
+        self.cs_pin.set_high()?; // Deselect device
+
+        // Step 3: Call EPD_4IN2B_V2_Init_new() - EXACT MATCH TO C CODE
+        eprintln!("   ⚙️  Running Init_new() sequence (EXACT C CODE MATCH)...");
+
+        // Reset again (matches C Init_new)
+        self.reset()?;
+
+        // Read busy (matches C Init_new)
         self.read_busy()?;
 
-        self.send_command(0x3C)?; // BorderWaveform
-        self.send_data(0x05)?;
+        // Soft reset with 0x12 (matches C Init_new, NOT 0x04)
+        self.send_command(0x12)?; // SWRESET (matches C Init_new)
+        self.read_busy()?;
 
+        // BorderWaveform with 0x3C/0x05 (matches C Init_new, NOT 0x00/0x0F)
+        self.send_command(0x3C)?; // BorderWaveform (matches C Init_new)
+        self.send_data(0x05)?; // (matches C Init_new)
+
+        // Read built-in temperature sensor (matches C Init_new)
         self.send_command(0x18)?; // Read built-in temperature sensor
-        self.send_data(0x80)?;
+        self.send_data(0x80)?; // (matches C Init_new)
 
+        // Data entry mode setting (matches C Init_new)
         self.send_command(0x11)?; // Data entry mode setting
-        self.send_data(0x03)?;
+        self.send_data(0x03)?; // X-mode (matches C Init_new)
 
-        // Set RAM X address start/end
-        self.send_command(0x44)?;
-        self.send_data(0x00)?;
-        self.send_data((self.width / 8 - 1) as u8)?;
+        // Set windows using SetWindows function (matches C Init_new)
+        eprintln!("   📐 Setting display windows...");
+        self.send_command(0x44)?; // SET_RAM_X_ADDRESS_START_END_POSITION
+        self.send_data(0x00)?; // Xstart>>3
+        self.send_data(((self.width - 1) / 8) as u8)?; // Xend>>3
 
-        // Set RAM Y address start/end
-        self.send_command(0x45)?;
-        self.send_data(0x00)?;
-        self.send_data(0x00)?;
-        self.send_data(((self.height - 1) % 256) as u8)?;
-        self.send_data(((self.height - 1) / 256) as u8)?;
+        self.send_command(0x45)?; // SET_RAM_Y_ADDRESS_START_END_POSITION
+        self.send_data(0x00)?; // Ystart & 0xFF
+        self.send_data(0x00)?; // (Ystart >> 8) & 0xFF
+        self.send_data(((self.height - 1) % 256) as u8)?; // Yend & 0xFF
+        self.send_data(((self.height - 1) / 256) as u8)?; // (Yend >> 8) & 0xFF
 
-        // Set RAM X address counter
-        self.send_command(0x4E)?;
-        self.send_data(0x00)?;
+        // Set cursor using SetCursor function (matches C Init_new)
+        eprintln!("   📍 Setting cursor position...");
+        self.send_command(0x4E)?; // SET_RAM_X_ADDRESS_COUNTER
+        self.send_data(0x00)?; // (Xstart>>3) & 0xFF
 
-        // Set RAM Y address counter
-        self.send_command(0x4F)?;
-        self.send_data(0x00)?;
-        self.send_data(0x00)?;
+        self.send_command(0x4F)?; // SET_RAM_Y_ADDRESS_COUNTER
+        self.send_data(0x00)?; // Ystart & 0xFF
+        self.send_data(0x00)?; // (Ystart >> 8) & 0xFF
 
+        // Final busy check (matches C Init_new)
         self.read_busy()?;
 
-        eprintln!("   ✅ EPD initialization completed successfully!");
+        eprintln!("   ✅ EPD initialization completed (EXACT C CODE MATCH)!");
         Ok(())
     }
 
@@ -319,16 +350,16 @@ where
         }
         eprintln!("   ✅ Black buffer sent successfully");
 
-        // Send red buffer using 0x26 command
-        eprintln!("   🔴 Sending red buffer (using 0x26 command)...");
+        // Send red buffer using 0x26 command - DISABLE RED COMPLETELY FOR TESTING
+        eprintln!("   🔴 Sending EMPTY red buffer (testing without red)...");
         self.send_command(0x26)?;
-        thread::sleep(Duration::from_millis(10)); // Add small delay after command
-        for j in 0..high {
-            for i in 0..wide {
-                self.send_data(!red_buffer[i + j * wide])?; // Inverted as per C code
+        thread::sleep(Duration::from_millis(10));
+        for _j in 0..high {
+            for _i in 0..wide {
+                self.send_data(0x00)?; // Send all zeros - no red pixels at all
             }
         }
-        eprintln!("   ✅ Red buffer sent successfully");
+        eprintln!("   ✅ Empty red buffer sent successfully");
 
         // Wait before refresh to ensure data is stable
         eprintln!("   ⏱️  Waiting 100ms before display refresh...");
@@ -429,6 +460,66 @@ where
         Ok(())
     }
 
+    /// Display image data - EXACT C code match including red buffer inversion
+    pub fn display_c_exact(
+        &mut self,
+        black_buffer: &[u8],
+        red_buffer: &[u8],
+    ) -> Result<(), EpdError> {
+        eprintln!("   📤 DISPLAY FUNCTION CALLED (EXACT C MATCH with red inversion)...");
+
+        let high = self.height as usize;
+        let wide = self.width.div_ceil(8) as usize;
+
+        eprintln!(
+            "   📐 Display dimensions: {}x{} pixels = {} bytes per row",
+            self.width, self.height, wide
+        );
+        eprintln!(
+            "    Buffer sizes: black={} bytes, red={} bytes",
+            black_buffer.len(),
+            red_buffer.len()
+        );
+
+        // Count non-white pixels for debugging
+        let black_pixels = black_buffer.iter().map(|&b| b.count_zeros()).sum::<u32>();
+        let red_pixels = red_buffer.iter().map(|&b| b.count_ones()).sum::<u32>();
+        eprintln!(
+            "   📊 Pixel counts: {} black pixels, {} red pixels",
+            black_pixels, red_pixels
+        );
+
+        // Send black buffer using 0x24 command (matches C EPD_4IN2B_V2_Display_new)
+        eprintln!("   📝 Sending black buffer (using 0x24 command)...");
+        self.send_command(0x24)?;
+        for j in 0..high {
+            for i in 0..wide {
+                self.send_data(black_buffer[i + j * wide])?;
+            }
+        }
+        eprintln!("   ✅ Black buffer sent successfully");
+
+        // Send red buffer using 0x26 command with INVERSION (matches C code exactly)
+        eprintln!("   🔴 Sending red buffer (using 0x26 command, WITH INVERSION like C code)...");
+        self.send_command(0x26)?;
+        for j in 0..high {
+            for i in 0..wide {
+                self.send_data(!red_buffer[i + j * wide])?; // INVERT red buffer like C code: ~ryimage[i + j * Width]
+            }
+        }
+        eprintln!("   ✅ Red buffer sent successfully (with inversion like C code)");
+
+        // Turn on display (matches C code exactly)
+        eprintln!("   🔆 Turning on display (matching C code exactly)...");
+        self.send_command(0x22)?;
+        self.send_data(0xF7)?;
+        self.send_command(0x20)?;
+        self.read_busy()?;
+        eprintln!("   ✅ Image data sent and display updated (C code exact match)");
+
+        Ok(())
+    }
+
     /// Clear the display - DISABLED per persistence "cheat sheet"
     /// "Comment out / delete every call to Clear(), DEINIT() or init() that runs after the first successful frame"
     #[allow(dead_code)]
@@ -480,6 +571,31 @@ where
 
         thread::sleep(Duration::from_millis(2000));
         eprintln!("   ✅ Display sleeping");
+        Ok(())
+    }
+
+    /// Power off and deep sleep sequence for persistence (CRITICAL for Rev 2.2)
+    /// This is the key missing piece from the persistence cheat sheet
+    pub fn power_off_and_deep_sleep(&mut self) -> Result<(), EpdError> {
+        eprintln!("   💤 POWER OFF AND DEEP SLEEP (CRITICAL FOR PERSISTENCE)...");
+        eprintln!("       This follows the persistence cheat sheet exactly");
+
+        // Step 1: POWER_OFF command
+        eprintln!("       📤 Sending 0x02 (POWER_OFF)...");
+        self.send_command(0x02)?; // POWER_OFF
+        eprintln!("       📡 Waiting for BUSY after POWER_OFF...");
+        self.read_busy()?;
+
+        // Step 2: DEEP_SLEEP command with mandatory 0x01 byte
+        eprintln!("       📤 Sending 0x10 (DEEP_SLEEP)...");
+        self.send_command(0x10)?; // DEEP_SLEEP
+        eprintln!("       📤 Sending 0x01 (mandatory byte for SSD1683/SSD1680)...");
+        self.send_data(0x01)?; // <-- mandatory byte for SSD1683/SSD1680 (Rev 2.2)
+        eprintln!("       📡 Waiting for BUSY after DEEP_SLEEP...");
+        self.read_busy()?;
+
+        eprintln!("   ✅ Power off and deep sleep completed - image should now persist!");
+        eprintln!("       The display controller is now parked safely for persistence");
         Ok(())
     }
 }

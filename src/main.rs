@@ -173,8 +173,8 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
     // Buffer is already initialized to white by default - no need to clear again
 
     // Choose rendering mode: true = test patterns, false = tide chart
-    // let test_mode = true; // Back to simple test pattern that was working before
-    let test_mode = false; // Complex tide chart - let's test this on hardware!
+    // let test_mode = true; // Start with simple test pattern to debug persistence
+    let test_mode = false; // Complex tide chart - test this after simple patterns work
 
     if test_mode {
         eprintln!("🧪 TEST MODE: Adding geometric test patterns...");
@@ -189,26 +189,34 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
     eprintln!("     ⚠️  This should be called EXACTLY ONCE to avoid flickering");
 
     // Display the rendered data
-    eprintln!("     🔄 About to call epd.display() - this should write to display memory");
-    epd.display(display_buffer.black_buffer(), display_buffer.red_buffer())?;
-    eprintln!("     ✅ epd.display() completed - data written and display turned on");
+    eprintln!("     🔄 About to call epd.display_c_exact() - this matches C code exactly including red inversion");
+    epd.display_c_exact(display_buffer.black_buffer(), display_buffer.red_buffer())?;
+    eprintln!("     ✅ epd.display_c_exact() completed - data written with C code exact behavior");
 
-    // Add a small delay to let the display finish updating
-    eprintln!("     ⏱️  Waiting 3 seconds for display update to fully complete...");
-    std::thread::sleep(std::time::Duration::from_secs(3));
-    eprintln!("     ⏱️  3 second wait completed - image should now be stable and persistent");
+    // CRITICAL: Power off and deep sleep for persistence (from cheat sheet)
+    eprintln!("     💤 CRITICAL: Calling power off and deep sleep for persistence...");
+    epd.power_off_and_deep_sleep()?;
+    eprintln!("     ✅ Power off and deep sleep completed - image should now persist!");
 
     eprintln!("     ✅ Display function completed");
 
-    eprintln!("✅ E-ink display updated successfully (image should persist)"); // Keep the program running briefly to verify persistence
-    eprintln!("🕐 Keeping program running for 30 seconds to verify image persistence...");
-    eprintln!("   Image should now be stable and persistent (no flickering)");
+    eprintln!("✅ E-ink display updated successfully with PERSISTENCE SEQUENCE!");
+    eprintln!("   📋 Persistence checklist completed:");
+    eprintln!("   ✅ 1. Drew image once (no clear after)");
+    eprintln!("   ✅ 2. Sent POWER_OFF (0x02) + wait BUSY");
+    eprintln!("   ✅ 3. Sent DEEP_SLEEP (0x10) + 0x01 + wait BUSY");
+    eprintln!("   ✅ 4. Display controller parked safely");
+    eprintln!();
+    eprintln!("🎯 Image should now persist indefinitely (even with Pi powered off)");
+    eprintln!("   This follows the persistence cheat sheet exactly");
+    eprintln!("   You can now safely power off the Pi - image will remain");
+    eprintln!();
+    eprintln!("🕐 Keeping program running for 10 seconds to verify persistence...");
     eprintln!("   Press Ctrl+C to exit early");
-    std::thread::sleep(std::time::Duration::from_secs(30));
+    std::thread::sleep(std::time::Duration::from_secs(10));
 
-    // DON'T call any sleep methods - let the image persist naturally
-    eprintln!("   Program completed - image should remain on display indefinitely");
-    eprintln!("   E-ink displays retain images without any power management commands");
+    eprintln!("   ✅ Persistence test completed - you can now safely power off the Pi");
+    eprintln!("   The image should remain on the display indefinitely");
 
     Ok(())
 }
@@ -237,18 +245,9 @@ fn render_tide_data_to_buffer(
 fn add_geometric_test_patterns(buffer: &mut tide_clock_lib::epd4in2b_v2::DisplayBuffer) {
     use tide_clock_lib::epd4in2b_v2::Color;
 
-    eprintln!("🎨 Adding ULTRA SIMPLE test pattern for basic verification...");
+    eprintln!("🎨 Adding SIMPLE BORDER test pattern for reliable debugging...");
 
-    // Test 1: Just fill the entire screen black to see if anything shows up
-    eprintln!("   ⬛ TEST: Filling entire screen black...");
-    for x in 0..400 {
-        for y in 0..300 {
-            buffer.set_pixel(x, y, Color::Black);
-        }
-    }
-
-    /*
-    // Alternative: Just a simple 5px border
+    // Test: Just a simple 5px border (less aggressive than full black screen)
     eprintln!("   ⬛ Drawing simple 5px border...");
     for thickness in 0..5 {
         // Top and bottom borders
@@ -260,6 +259,15 @@ fn add_geometric_test_patterns(buffer: &mut tide_clock_lib::epd4in2b_v2::Display
         for y in 0..300 {
             buffer.set_pixel(thickness, y, Color::Black); // Left border
             buffer.set_pixel(399 - thickness, y, Color::Black); // Right border
+        }
+    }
+
+    /*
+    // Alternative: Just fill the entire screen black to see if anything shows up
+    eprintln!("   ⬛ TEST: Filling entire screen black...");
+    for x in 0..400 {
+        for y in 0..300 {
+            buffer.set_pixel(x, y, Color::Black);
         }
     }
     */

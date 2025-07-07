@@ -109,10 +109,12 @@ const TTL: u64 = 1800; // 30 minutes
 /// use tide_clock_lib::tide_data::fetch;
 /// use tide_clock_lib::fallback;
 ///
-/// let series = fetch().unwrap_or_else(|err| {
+/// # async fn example() {
+/// let series = fetch().await.unwrap_or_else(|err| {
 ///     eprintln!("Failed to fetch tide data: {}", err);
 ///     fallback::approximate()
 /// });
+/// # }
 /// ```
 pub async fn fetch() -> Result<TideSeries, TideError> {
     let config = Config::load();
