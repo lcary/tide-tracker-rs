@@ -10,6 +10,8 @@ ENABLE_OVERLAY=0
 
 usage() {
   echo "Usage: sudo $0 --binary /path/to/tide-tracker --config /path/to/tide-config.toml [--enable-overlay]"
+  echo "Consider running 'bash scripts/get-binary.sh' to download the latest release binary."
+  echo "See also the sample tide-config.toml configuration at the repo root."
   exit 1
 }
 
