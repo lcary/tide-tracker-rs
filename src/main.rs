@@ -56,13 +56,15 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
     // Get hardware pin config from Config
     let hw = &config.display.hardware;
 
-    let cs = CdevOutputPin::new(&mut chip, hw.cs_pin as u32)?;
+    // Only request DC, RST, BUSY via gpiod for hardware SPI
     let dc = CdevOutputPin::new(&mut chip, hw.dc_pin as u32)?;
     let rst = CdevOutputPin::new(&mut chip, hw.rst_pin as u32)?;
     let busy = CdevInputPin::new(&mut chip, hw.busy_pin as u32)?;
 
-    let spi = SpidevHwSpi::new()?; // new SPI backend
-    let mut epd = Epd4in2bV2::new(spi, cs, dc, rst, busy);
+    // Use kernel SPI driver (CS handled by kernel)
+    let spi = SpidevHwSpi::new()?;
+    // Pass None::<CdevOutputPin> for CS pin to satisfy type inference
+    let mut epd = Epd4in2bV2::new(spi, None::<CdevOutputPin>, dc, rst, busy);
 
     match epd.init() {
         Ok(_) => {

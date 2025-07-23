@@ -49,7 +49,7 @@ pub trait InputPin {
 /// EPD 4.2" B/W/Red V2 display driver
 pub struct Epd4in2bV2<SPI, CS, DC, RST, BUSY> {
     spi: SPI,
-    cs_pin: CS,
+    cs_pin: Option<CS>,
     dc_pin: DC,
     rst_pin: RST,
     busy_pin: BUSY,
@@ -140,7 +140,7 @@ where
     BUSY: InputPin,
 {
     /// Create a new EPD instance
-    pub fn new(spi: SPI, cs_pin: CS, dc_pin: DC, rst_pin: RST, busy_pin: BUSY) -> Self {
+    pub fn new(spi: SPI, cs_pin: Option<CS>, dc_pin: DC, rst_pin: RST, busy_pin: BUSY) -> Self {
         Self {
             spi,
             cs_pin,
@@ -172,18 +172,26 @@ where
     /// Send command - follows Python send_command() exactly
     fn send_command(&mut self, command: u8) -> Result<(), EpdError> {
         self.dc_pin.set_low()?; // Command mode
-        self.cs_pin.set_low()?; // Select device
+        if let Some(cs) = &mut self.cs_pin {
+            cs.set_low()?;
+        } // Select device if CS present
         self.spi.write_byte(command)?;
-        self.cs_pin.set_high()?; // Deselect device
+        if let Some(cs) = &mut self.cs_pin {
+            cs.set_high()?;
+        } // Deselect device if CS present
         Ok(())
     }
 
     /// Send data - follows Python send_data() exactly
     fn send_data(&mut self, data: u8) -> Result<(), EpdError> {
         self.dc_pin.set_high()?; // Data mode
-        self.cs_pin.set_low()?; // Select device
+        if let Some(cs) = &mut self.cs_pin {
+            cs.set_low()?;
+        } // Select device if CS present
         self.spi.write_byte(data)?;
-        self.cs_pin.set_high()?; // Deselect device
+        if let Some(cs) = &mut self.cs_pin {
+            cs.set_high()?;
+        } // Deselect device if CS present
         Ok(())
     }
 
@@ -228,21 +236,30 @@ where
         // Step 2: Hardware revision detection sequence (matches C EPD_4IN2B_V2_Init() exactly)
         eprintln!("   🔍 Hardware revision detection (matching C code exactly)...");
         self.dc_pin.set_low()?; // Command mode
-        self.cs_pin.set_low()?; // Select device
+        if let Some(cs) = &mut self.cs_pin {
+            cs.set_low()?;
+        } // Select device if CS present
         self.spi.write_byte(0x2F)?; // Send detection command (matches C code)
-        self.cs_pin.set_high()?; // Deselect device
+        if let Some(cs) = &mut self.cs_pin {
+            cs.set_high()?;
+        } // Deselect device if CS present
         thread::sleep(Duration::from_millis(50)); // DEV_Delay_ms(50) from C code
 
         // Try to read response (matches C code: i = DEV_SPI_ReadData())
         self.dc_pin.set_high()?; // Data mode
-        self.cs_pin.set_low()?; // Select device
+        if let Some(cs) = &mut self.cs_pin {
+            cs.set_low()?;
+        } // Select device if CS present
         match self.spi.read_byte() {
             Ok(revision) => eprintln!("   📄 Hardware revision byte: 0x{:02X}", revision),
             Err(_) => {
                 eprintln!("   📄 Hardware revision read failed (this is normal for some setups)")
             }
         }
-        self.cs_pin.set_high()?; // Deselect device
+        if let Some(cs) = &mut self.cs_pin {
+            cs.set_high()?;
+        } // Deselect device if CS present
+        thread::sleep(Duration::from_millis(50)); // DEV_Delay_ms(50) from C code
 
         // Step 3: Call EPD_4IN2B_V2_Init_new() - EXACT MATCH TO C CODE
         eprintln!("   ⚙️  Running Init_new() sequence (EXACT C CODE MATCH)...");
