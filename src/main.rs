@@ -14,9 +14,10 @@ mod hw_spi_spidev;
 // Re-export library types for internal use
 pub use tide_clock_lib::{config::Config, Sample, TideSeries};
 
-// Import custom EPD traits for hardware mode
-#[cfg(all(target_os = "linux", feature = "hardware"))]
-use tide_clock_lib::epd4in2b_v2::{GpioPin, InputPin};
+// Import new GPIO and SPI types for hardware mode
+use crate::gpio_sysfs::{CdevInputPin, CdevOutputPin};
+use crate::hw_spi_spidev::SpidevHwSpi;
+use anyhow::Context;
 
 // Application dependencies
 use std::env;
@@ -52,7 +53,9 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
 
     let mut chip = gpio_cdev::Chip::new("/dev/gpiochip0").context("open gpiochip0")?;
 
-    // map your numbers—these come from Config:
+    // Get hardware pin config from Config
+    let hw = &config.display.hardware;
+
     let cs = CdevOutputPin::new(&mut chip, hw.cs_pin as u32)?;
     let dc = CdevOutputPin::new(&mut chip, hw.dc_pin as u32)?;
     let rst = CdevOutputPin::new(&mut chip, hw.rst_pin as u32)?;
