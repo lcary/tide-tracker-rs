@@ -8,6 +8,9 @@
 #[cfg(test)]
 mod tests;
 
+mod gpio_sysfs;
+mod hw_spi_spidev;
+
 // Re-export library types for internal use
 pub use tide_clock_lib::{config::Config, Sample, TideSeries};
 
@@ -47,110 +50,16 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
 
     eprintln!("🚀 Initializing GPIO-only e-ink display (SPI disabled mode)...");
 
-    // Use rppal for GPIO access (equivalent to Python's gpiozero)
-    // This works without /dev/gpiochip* devices by accessing GPIO directly
-    let gpio = rppal::gpio::Gpio::new().map_err(|e| {
-        anyhow::anyhow!(
-            "Failed to initialize GPIO: {}. Make sure you're running as root or in gpio group.",
-            e
-        )
-    })?;
+    let mut chip = gpio_cdev::Chip::new("/dev/gpiochip0").context("open gpiochip0")?;
 
-    let hw = &config.display.hardware;
+    // map your numbers—these come from Config:
+    let cs = CdevOutputPin::new(&mut chip, hw.cs_pin as u32)?;
+    let dc = CdevOutputPin::new(&mut chip, hw.dc_pin as u32)?;
+    let rst = CdevOutputPin::new(&mut chip, hw.rst_pin as u32)?;
+    let busy = CdevInputPin::new(&mut chip, hw.busy_pin as u32)?;
 
-    eprintln!("🔌 Initializing GPIO pins (following Waveshare Python example)...");
-    eprintln!("   DC pin: GPIO {}", hw.dc_pin);
-    eprintln!("   RST pin: GPIO {}", hw.rst_pin);
-    eprintln!("   BUSY pin: GPIO {}", hw.busy_pin);
-    eprintln!("   CS pin: GPIO {}", hw.cs_pin);
-
-    // Initialize GPIO pins - using rppal which works like gpiozero
-    let dc_pin = gpio
-        .get(hw.dc_pin as u8)
-        .map_err(|e| anyhow::anyhow!("Failed to get DC pin GPIO {}: {}", hw.dc_pin, e))?
-        .into_output();
-
-    let rst_pin = gpio
-        .get(hw.rst_pin as u8)
-        .map_err(|e| anyhow::anyhow!("Failed to get RST pin GPIO {}: {}", hw.rst_pin, e))?
-        .into_output();
-
-    let busy_pin = gpio
-        .get(hw.busy_pin as u8)
-        .map_err(|e| anyhow::anyhow!("Failed to get BUSY pin GPIO {}: {}", hw.busy_pin, e))?
-        .into_input();
-
-    // Create software SPI using rppal GPIO pins (without CS - EPD will control it)
-    let mut spi = RppalSoftwareSpi::new(&gpio, 10, 11)?; // MOSI=GPIO10, SCLK=GPIO11
-
-    eprintln!("🎨 Creating e-ink display driver (4.2\" b/w/red v2)...");
-
-    // Wrap rppal pins to be compatible with our custom EPD driver
-    eprintln!("🔧 Wrapping GPIO pins for custom EPD driver...");
-    // CS pin is controlled by EPD driver, not SPI
-    let cs_pin_wrapper = RppalOutputPin::new(gpio.get(hw.cs_pin as u8)?.into_output());
-    let mut dc_pin_wrapper = RppalOutputPin::new(dc_pin);
-    let mut rst_pin_wrapper = RppalOutputPin::new(rst_pin);
-    let busy_pin_wrapper = RppalInputPin::new(busy_pin);
-    eprintln!("✅ GPIO pin wrappers created successfully");
-
-    // Check BUSY pin state before initialization
-    eprintln!("🔍 Checking BUSY pin state before initialization...");
-    match busy_pin_wrapper.is_high() {
-        Ok(true) => eprintln!("   BUSY pin is HIGH (display may be busy or not connected)"),
-        Ok(false) => eprintln!("   BUSY pin is LOW (display ready)"),
-        Err(e) => eprintln!("   ⚠️  Failed to read BUSY pin: {:?}", e),
-    }
-
-    // Test GPIO pin behavior before EPD initialization
-    eprintln!("🧪 Testing GPIO pin control...");
-    eprintln!("   Testing RST pin (should toggle)...");
-    rst_pin_wrapper
-        .set_low()
-        .map_err(|e| anyhow::anyhow!("RST set_low failed: {:?}", e))?;
-    std::thread::sleep(std::time::Duration::from_millis(100));
-    rst_pin_wrapper
-        .set_high()
-        .map_err(|e| anyhow::anyhow!("RST set_high failed: {:?}", e))?;
-    eprintln!("   RST pin toggled successfully");
-
-    eprintln!("   Testing DC pin (should toggle)...");
-    dc_pin_wrapper
-        .set_low()
-        .map_err(|e| anyhow::anyhow!("DC set_low failed: {:?}", e))?;
-    std::thread::sleep(std::time::Duration::from_millis(10));
-    dc_pin_wrapper
-        .set_high()
-        .map_err(|e| anyhow::anyhow!("DC set_high failed: {:?}", e))?;
-    eprintln!("   DC pin toggled successfully");
-
-    eprintln!("   Re-checking BUSY pin after RST toggle...");
-    match busy_pin_wrapper.is_high() {
-        Ok(true) => eprintln!("   BUSY pin is HIGH"),
-        Ok(false) => eprintln!("   BUSY pin is LOW"),
-        Err(e) => eprintln!("   ⚠️  Failed to read BUSY pin: {:?}", e),
-    }
-
-    // Test SPI communication first
-    eprintln!("🧪 Testing software SPI by sending test bytes...");
-    spi.write_byte(0x00).ok(); // Test byte
-    spi.write_byte(0xFF).ok(); // Test byte
-    spi.write_byte(0xAA).ok(); // Test byte
-    eprintln!("   Software SPI test completed successfully");
-
-    // Now try the real EPD initialization with our custom driver
-    eprintln!("🚀 ATTEMPTING REAL EPD INITIALIZATION WITH CUSTOM DRIVER...");
-    eprintln!("   This follows the exact Python epd4in2b_v2.py implementation");
-    eprintln!("   Press Ctrl+C if it doesn't complete within 30 seconds");
-
-    // Initialize the display using our custom EPD driver (matches Python exactly)
-    let mut epd = Epd4in2bV2::new(
-        spi,
-        cs_pin_wrapper,
-        dc_pin_wrapper,
-        rst_pin_wrapper,
-        busy_pin_wrapper,
-    );
+    let spi = SpidevHwSpi::new()?; // new SPI backend
+    let mut epd = Epd4in2bV2::new(spi, cs, dc, rst, busy);
 
     match epd.init() {
         Ok(_) => {

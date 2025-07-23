@@ -30,7 +30,6 @@ impl std::fmt::Display for EpdError {
 
 impl std::error::Error for EpdError {}
 
-/// Trait for software SPI interface
 pub trait SoftwareSpi {
     fn write_byte(&mut self, data: u8) -> Result<(), EpdError>;
     fn read_byte(&mut self) -> Result<u8, EpdError>;
