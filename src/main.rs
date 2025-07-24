@@ -223,25 +223,6 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
     Ok(())
 }
 
-/// Render actual tide data to the display buffer using the full chart renderer
-#[cfg(all(target_os = "linux", feature = "hardware"))]
-#[allow(dead_code)]
-fn render_tide_data_to_buffer(
-    tide_series: &TideSeries,
-    buffer: &mut tide_clock_lib::epd4in2b_v2::DisplayBuffer,
-) {
-    eprintln!("🎨 Rendering tide chart to e-ink display buffer...");
-    eprintln!(
-        "   📊 Tide series has {} samples",
-        tide_series.samples.len()
-    );
-
-    // Use the complex tide chart renderer for e-paper display
-    tide_clock_lib::renderer::draw_eink_v2_custom(tide_series, buffer);
-
-    eprintln!("✅ Tide chart rendering completed");
-}
-
 /// Add a VERY simple test pattern for reliable debugging
 #[cfg(all(target_os = "linux", feature = "hardware"))]
 fn add_geometric_test_patterns(buffer: &mut tide_clock_lib::epd4in2b_v2::DisplayBuffer) {
