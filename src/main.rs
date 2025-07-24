@@ -15,8 +15,11 @@ mod hw_spi_spidev;
 pub use tide_clock_lib::{config::Config, Sample, TideSeries};
 
 // Import new GPIO and SPI types for hardware mode
+#[allow(unused_imports)]
 use crate::gpio_sysfs::{CdevInputPin, CdevOutputPin};
+#[allow(unused_imports)]
 use crate::hw_spi_spidev::SpidevHwSpi;
+#[allow(unused_imports)]
 use anyhow::Context;
 
 // Application dependencies
@@ -102,16 +105,26 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
         eprintln!("✅ Display cleared successfully");
 
         let renderer = tide_clock_lib::eink_renderer::EinkTideRenderer::new();
-        renderer.render_chart(&mut display_buffer, tide_series);
+        // New API: pass epd, display_buffer, tide_series
+        renderer.render_chart(&mut epd, &mut display_buffer, tide_series);
 
-        // After rendering the chart, overlay the last update time/date
+        // Overlay the last update time/date using embedded-graphics Text primitive
         use chrono::Local;
+        use embedded_graphics::mono_font::iso_8859_1::FONT_10X20;
+        use embedded_graphics::{
+            mono_font::MonoTextStyle, pixelcolor::BinaryColor, prelude::*, text::Text,
+        };
+
         let now = Local::now();
         let time_str = now.format("%-m/%-d %-I:%M%p").to_string(); // e.g. "7/23 8:14PM"
-                                                                   // Overlay at top right, 10px from right, 10px from top (large font, aligned)
-        let overlay_x = 400 - 10 - (time_str.len() as u32 * 10); // 10px per char for large font
-        let overlay_y = 10; // Top margin
-        renderer.draw_large_text(&mut display_buffer, overlay_x, overlay_y, &time_str);
+                                                                   // Overlay at top right, 10px from right, 10px from top
+        let char_width = 10; // FONT_10X20 width
+        let overlay_x = 400 - 10 - (time_str.len() as i32 * char_width);
+        let overlay_y = 10;
+        let style = MonoTextStyle::new(&FONT_10X20, BinaryColor::On);
+        Text::new(&time_str, Point::new(overlay_x, overlay_y + 16), style)
+            .draw(&mut display_buffer)
+            .ok();
 
         // Debug: Check what we actually rendered
         let black_pixels = display_buffer

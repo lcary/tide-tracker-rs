@@ -4,21 +4,28 @@
 //! the 4.2" B/W/Red e-ink display. It follows the drawing patterns from
 //! the Waveshare C examples for maximum reliability.
 
+// --- Required imports ---
 use crate::epd4in2b_v2::Epd4in2bV2;
 use crate::TideSeries;
-use embedded_graphics::{
-    mono_font::{ascii::FONT_10X20, MonoTextStyle},
-    pixelcolor::BinaryColor,
-    prelude::*,
-    primitives::*,
-    text::Text,
-};
+use embedded_graphics::mono_font::{ascii::FONT_10X20, MonoTextStyle};
+use embedded_graphics::pixelcolor::BinaryColor;
+use embedded_graphics::prelude::*;
+use embedded_graphics::primitives::{Circle, Line, PrimitiveStyle};
+use embedded_graphics::text::Text;
+
+// ...existing code...
 
 /// Chart renderer for the Waveshare 4.2" e-ink display using embedded-graphics
 pub struct EinkTideRenderer {
     pub width: u32,
     pub height: u32,
     pub margin: u32,
+}
+
+impl Default for EinkTideRenderer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl EinkTideRenderer {
@@ -34,17 +41,18 @@ impl EinkTideRenderer {
     /// Render a complete tide chart to the e-ink display
     pub fn render_chart<SPI, CS, DC, RST, BUSY, DT>(
         &self,
-        epd: &mut Epd4in2bV2<SPI, CS, DC, RST, BUSY>,
+        _epd: &mut Epd4in2bV2<SPI, CS, DC, RST, BUSY>,
         draw_target: &mut DT,
         tide: &TideSeries,
     ) where
         DT: DrawTarget<Color = BinaryColor>,
     {
+        // Chart and plot dimensions
         let chart_x = self.margin;
         let chart_y = self.margin;
         let chart_width = self.width - 2 * self.margin;
         let chart_height = self.height - 2 * self.margin;
-        let plot_margin = 15;
+        let plot_margin = 20;
         let plot_x = chart_x + plot_margin;
         let plot_y = chart_y + plot_margin;
         let plot_width = chart_width - 2 * plot_margin;
@@ -192,3 +200,4 @@ impl EinkTideRenderer {
         }
     }
 }
+// End of impl block
