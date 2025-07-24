@@ -17,10 +17,18 @@ A lean, memory-efficient tide tracking application for Raspberry Pi Zero 2 W wit
 ### Raspberry Pi (64-bit)
 - Any modern Raspberry Pi, but only tested for Zero 2 W currently
 - 500MB+ RAM recommended
-- Headless Linux (Raspberry Pi OS Lite recommended)  
+- Headless Linux (Raspberry Pi OS Lite recommended)
 - SPI configuration
-  - for 4.2": SPI DISABLED (`sudo raspi-config` → Interface Options → SPI → Disabled → Reboot)
-    - https://www.waveshare.com/wiki/4.2inch_e-Paper_Module_(B)_Manual#Python
+  - For hardware SPI: SPI **ENABLED** (`sudo raspi-config` → Interface Options → SPI → Enable → Reboot)
+  - SSH should be enabled for remote access (`sudo raspi-config` → Interface Options → SSH → Enable)
+
+#### Enable SPI and SSH on Raspberry Pi
+```bash
+sudo raspi-config
+# Interface Options → SPI → Enable
+# Interface Options → SSH → Enable
+sudo reboot
+```
 
 ### Waveshare 4.2" E-ink Display
 - Resolution: 400 × 300 pixels
@@ -122,20 +130,23 @@ Also install cross for cross-compilation: `cargo install cross`
 
 ## Installation & Setup (on Pi)
 
-### 1. Install Rust on Raspberry Pi
+### 1. Enable SPI and SSH
+See above for `raspi-config` instructions.
+
+### 2. Install Rust on Raspberry Pi
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source ~/.cargo/env
 ```
 
-### 2. Clone and Build
+### 3. Clone and Build
 ```bash
 git clone <repository-url>
 cd tide-tracker
 cargo build --release
 ```
 
-### 3. Test Installation
+### 4. Test Installation
 ```bash
 # Test with ASCII output (no hardware required)
 cargo run --release -- --stdout
@@ -257,30 +268,20 @@ sudo journalctl -u tide-tracker.service -f
 
 ### GPIO Pin Configuration
 
-The e-ink display GPIO pins are configurable via the `tide-config.toml` file. This allows you to override the default wiring if you have pin conflicts or hardware issues.
+The e-ink display GPIO pins are configurable via the `tide-config.toml` file. **Do NOT configure cs_pin for hardware SPI; CS is managed by the kernel SPI driver.**
 
 **Default Pin Mapping:**
 ```toml
 [display.hardware]
-cs_pin = 8    # GPIO 8 (Pin 24) - SPI Chip Select
-dc_pin = 25   # GPIO 25 (Pin 22) - Data/Command
-rst_pin = 17  # GPIO 17 (Pin 11) - Reset
-busy_pin = 24 # GPIO 24 (Pin 18) - Busy status
-```
-
-**Alternative Configuration Example:**
-If you have hardware conflicts (e.g., bad solder joints), you can override pins:
-```toml
-[display.hardware]
-cs_pin = 7    # GPIO 7 (Pin 26) - Alternative CS pin
-rst_pin = 27  # GPIO 27 (Pin 13) - Alternative reset pin
-# Keep other pins as default
-dc_pin = 25
+# cs_pin = 8   # REMOVE or comment out this line for hardware SPI
+rst_pin = 17
 busy_pin = 24
+dc_pin = 25
 ```
 
 **Important Notes:**
 - Ensure your physical wiring matches your configuration
+- Do not set cs_pin in config for hardware SPI
 - Changes require restarting the tide-tracker service
 - The configuration is loaded from the current directory's `tide-config.toml`
 
@@ -378,8 +379,9 @@ valgrind --leak-check=full ./target/release/tide-tracker --stdout
 - [x] Fix persistence (e-Paper)
 - [x] Fix mangled simple chart data (e-Paper)
 - [x] Test actual chart rendering (e-Paper)
-- [ ] Replace deprecated rppal with gpio-cdev (or pull in rppal code)
+- [x] Replace deprecated rppal with gpio-cdev (or pull in rppal code)
 - [x] Set up cronjob/svc
 - [x] Test Pi device restart resilience
-- [ ] Build and install in frame
+- [x] Build and install in frame
+- [x] Optimization using SPI
 - [ ] Support automatic config creation w/ location check

@@ -7,9 +7,13 @@ set -euo pipefail
 BIN_SRC=""
 CFG_SRC=""
 ENABLE_OVERLAY=0
+UPDATE_BINARY=0
+UPDATE_CONFIG=0
 
 usage() {
-  echo "Usage: sudo $0 --binary /path/to/tide-tracker --config /path/to/tide-config.toml [--enable-overlay]"
+  echo "Usage: sudo $0 --binary /path/to/tide-tracker --config /path/to/tide-config.toml [--enable-overlay] [--update-binary] [--update-config]"
+  echo "  --update-binary   Only update the binary if it changed."
+  echo "  --update-config   Only update the config if it changed."
   echo "Consider running 'bash scripts/get-binary.sh' to download the latest release binary."
   echo "See also the sample tide-config.toml configuration at the repo root."
   exit 1
@@ -20,13 +24,14 @@ while [[ $# -gt 0 ]]; do
     --binary)  BIN_SRC="$2"; shift 2 ;;
     --config)  CFG_SRC="$2"; shift 2 ;;
     --enable-overlay) ENABLE_OVERLAY=1; shift ;;
+    --update-binary) UPDATE_BINARY=1; shift ;;
+    --update-config) UPDATE_CONFIG=1; shift ;;
     *) usage ;;
   esac
 done
 
-[[ -n "$BIN_SRC" && -n "$CFG_SRC" ]] || usage
-[[ -f "$BIN_SRC" ]] || { echo "Binary not found: $BIN_SRC"; exit 2; }
-[[ -f "$CFG_SRC" ]] || { echo "Config not found: $CFG_SRC"; exit 2; }
+[[ -n "$BIN_SRC" || $UPDATE_CONFIG -eq 1 ]] || usage
+[[ -n "$CFG_SRC" || $UPDATE_BINARY -eq 1 ]] || usage
 
 ### ──────────────────────────
 ### Constants / paths
@@ -49,16 +54,42 @@ fi
 echo "Installing tide-tracker to run as user: $SERVICE_USER"
 
 ### ──────────────────────────
-### 1. Install binary & config
+### 1. Install binary & config (or update)
 ### ──────────────────────────
-install -Dm755 "$BIN_SRC" "$BIN_DEST"
-install -Dm644 "$CFG_SRC" "$CFG_DEST"
+if [[ $UPDATE_BINARY -eq 1 ]]; then
+  if [[ -n "$BIN_SRC" && -f "$BIN_SRC" ]]; then
+    echo "Updating binary..."
+    install -Dm755 "$BIN_SRC" "$BIN_DEST"
+    systemctl restart tide-tracker.service || true
+    echo "✅ Binary updated and service restarted."
+  else
+    echo "Binary not found: $BIN_SRC"; exit 2
+  fi
+fi
 
-### ──────────────────────────
-### 2. systemd service & timer (every 10 minutes)
-### ──────────────────────────
-# Always recreate service file to ensure proper configuration
-cat <<EOF >"$SERVICE_FILE"
+if [[ $UPDATE_CONFIG -eq 1 ]]; then
+  if [[ -n "$CFG_SRC" && -f "$CFG_SRC" ]]; then
+    echo "Updating config..."
+    install -Dm644 "$CFG_SRC" "$CFG_DEST"
+    systemctl restart tide-tracker.service || true
+    echo "✅ Config updated and service restarted."
+  else
+    echo "Config not found: $CFG_SRC"; exit 2
+  fi
+fi
+
+if [[ $UPDATE_BINARY -eq 0 && $UPDATE_CONFIG -eq 0 ]]; then
+  ### ──────────────────────────
+  ### 1. Install binary & config
+  ### ──────────────────────────
+  install -Dm755 "$BIN_SRC" "$BIN_DEST"
+  install -Dm644 "$CFG_SRC" "$CFG_DEST"
+
+  ### ──────────────────────────
+  ### 2. systemd service & timer (every 10 minutes)
+  ### ──────────────────────────
+  # Always recreate service file to ensure proper configuration
+  cat <<EOF >"$SERVICE_FILE"
 [Unit]
 Description=Tide Tracker e-paper display update
 After=network-online.target
@@ -86,8 +117,8 @@ ProtectHome=true
 PrivateTmp=true
 EOF
 
-# Always recreate timer file to ensure proper configuration
-cat <<EOF >"$TIMER_FILE"
+  # Always recreate timer file to ensure proper configuration
+  cat <<EOF >"$TIMER_FILE"
 [Unit]
 Description=Update tide tracker every 10 minutes
 Requires=tide-tracker.service
@@ -101,15 +132,15 @@ AccuracySec=1min
 WantedBy=timers.target
 EOF
 
-# Reload and enable
-systemctl daemon-reload
-systemctl enable tide-tracker.service
-systemctl enable tide-tracker.timer
+  # Reload and enable
+  systemctl daemon-reload
+  systemctl enable tide-tracker.service
+  systemctl enable tide-tracker.timer
 
-### ──────────────────────────
-### 3. Midnight full-refresh timer
-### ──────────────────────────
-if [[ ! -f "$FULL_REFRESH_SVC" ]]; then
+  ### ──────────────────────────
+  ### 3. Midnight full-refresh timer
+  ### ──────────────────────────
+  if [[ ! -f "$FULL_REFRESH_SVC" ]]; then
 cat <<EOF >"$FULL_REFRESH_SVC"
 [Unit]
 Description=Full e-paper refresh at midnight
@@ -120,9 +151,9 @@ ExecStart=$BIN_DEST --full-refresh
 WorkingDirectory=$CFG_DIR
 User=$SERVICE_USER
 EOF
-fi
+  fi
 
-if [[ ! -f "$FULL_REFRESH_TIMER" ]]; then
+  if [[ ! -f "$FULL_REFRESH_TIMER" ]]; then
 cat <<EOF >"$FULL_REFRESH_TIMER"
 [Unit]
 Description=Timer that triggers midnight e-paper refresh
@@ -135,40 +166,41 @@ Unit=$(basename "$FULL_REFRESH_SVC")
 [Install]
 WantedBy=timers.target
 EOF
-  systemctl daemon-reload
-  systemctl enable tide-midnight-refresh.timer
-fi
-
-### ──────────────────────────
-### 4. Hardware watchdog
-### ──────────────────────────
-if ! grep -q '^dtparam=watchdog=on' /boot/config.txt; then
-  echo 'Enabling BCM watchdog…'
-  echo 'dtparam=watchdog=on' >> /boot/config.txt
-fi
-
-if ! dpkg -s watchdog &>/dev/null; then
-  apt-get update
-  apt-get install -y watchdog
-fi
-systemctl enable watchdog.service
-
-### ──────────────────────────
-### 5. Optional read-only overlay
-### ──────────────────────────
-if [[ "$ENABLE_OVERLAY" -eq 1 ]]; then
-  if ! raspi-config nonint get_overlayfs | grep -q 1; then
-    echo 'Activating read-only overlay filesystem…'
-    raspi-config nonint enable_overlayfs
-  else
-    echo 'Overlay FS already enabled, skipping.'
+    systemctl daemon-reload
+    systemctl enable tide-midnight-refresh.timer
   fi
-fi
 
-### ──────────────────────────
-### 6. Finish
-### ──────────────────────────
-echo '✅  Tide Tracker system services installed.'
-echo '   → Reboot now? (y/N)'
-read -r reply
-[[ "$reply" =~ ^[Yy]$ ]] && reboot
+  ### ──────────────────────────
+  ### 4. Hardware watchdog
+  ### ──────────────────────────
+  if ! grep -q '^dtparam=watchdog=on' /boot/config.txt; then
+    echo 'Enabling BCM watchdog…'
+    echo 'dtparam=watchdog=on' >> /boot/config.txt
+  fi
+
+  if ! dpkg -s watchdog &>/dev/null; then
+    apt-get update
+    apt-get install -y watchdog
+  fi
+  systemctl enable watchdog.service
+
+  ### ──────────────────────────
+  ### 5. Optional read-only overlay
+  ### ──────────────────────────
+  if [[ "$ENABLE_OVERLAY" -eq 1 ]]; then
+    if ! raspi-config nonint get_overlayfs | grep -q 1; then
+      echo 'Activating read-only overlay filesystem…'
+      raspi-config nonint enable_overlayfs
+    else
+      echo 'Overlay FS already enabled, skipping.'
+    fi
+  fi
+
+  ### ──────────────────────────
+  ### 6. Finish
+  ### ──────────────────────────
+  echo '✅  Tide Tracker system services installed.'
+  echo '   → Reboot now? (y/N)'
+  read -r reply
+  [[ "$reply" =~ ^[Yy]$ ]] && reboot
+fi
