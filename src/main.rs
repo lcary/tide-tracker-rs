@@ -186,11 +186,6 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
         }
     }
 
-    // SKIP power-off for now since basic persistence works
-    eprintln!("     ⚠️  SKIPPING power-off sequence since basic persistence is working");
-
-    eprintln!("     ✅ Display function completed");
-
     eprintln!("✅ E-ink display updated successfully with PERSISTENCE SEQUENCE!");
     eprintln!("   📋 Persistence checklist completed:");
     eprintln!("   ✅ 1. Drew image once (no clear after)");
@@ -201,13 +196,6 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
     eprintln!("🎯 Image should now persist indefinitely (even with Pi powered off)");
     eprintln!("   This follows the persistence cheat sheet exactly");
     eprintln!("   You can now safely power off the Pi - image will remain");
-    eprintln!();
-    eprintln!("🕐 Keeping program running for 10 seconds to verify persistence...");
-    eprintln!("   Press Ctrl+C to exit early");
-    std::thread::sleep(std::time::Duration::from_secs(10));
-
-    eprintln!("   ✅ Persistence test completed - you can now safely power off the Pi");
-    eprintln!("   The image should remain on the display indefinitely");
 
     Ok(())
 }
