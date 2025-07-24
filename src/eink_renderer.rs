@@ -98,9 +98,10 @@ impl EinkTideRenderer {
             tick.into_styled(axis_style).draw(draw_target).ok();
             let tick_height = max_height - (i as f32 / num_ticks as f32) * height_range;
             let label = format!("{:.0}", tick_height);
+            // Move Y labels closer to axis (from -40 to -32), and align vertically with tick (from -6 to +7)
             Text::new(
                 &label,
-                Point::new((plot_x - 40) as i32, (tick_y - 6) as i32),
+                Point::new((plot_x - 32) as i32, (tick_y + 7) as i32),
                 label_style,
             )
             .draw(draw_target)
@@ -114,16 +115,18 @@ impl EinkTideRenderer {
         )
         .draw(draw_target)
         .ok();
+        // Move "Lo" down to be between the lowest two Y labels (no overlap)
+        let lo_y = plot_y + plot_height - 18;
         Text::new(
             "Lo",
-            Point::new((plot_x - 40) as i32, (plot_y + plot_height - 50) as i32),
+            Point::new((plot_x - 40) as i32, lo_y as i32),
             label_style,
         )
         .draw(draw_target)
         .ok();
 
         // Draw X-axis time labels
-        let label_y = plot_y + plot_height + 10;
+        let label_y = plot_y + plot_height + 16; // move labels further below the axis
         if label_y + 12 < self.height {
             Text::new(
                 "-12h",
