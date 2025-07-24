@@ -1,10 +1,42 @@
-//! Custom EPD 4.2" B/W/Red V2 Driver
-//!
-//! This implementation closely follows the Waveshare Python epd4in2b_v2.py
-//! and C examples to ensure 100% compatibility with the hardware.
+// Custom EPD 4.2" B/W/Red V2 Driver
+//
+// This implementation closely follows the Waveshare Python epd4in2b_v2.py
+// and C examples to ensure 100% compatibility with the hardware.
 
+use embedded_graphics::draw_target::DrawTarget;
+use embedded_graphics::geometry::OriginDimensions;
+use embedded_graphics::pixelcolor::BinaryColor;
+use embedded_graphics::prelude::*;
 use std::thread;
 use std::time::Duration;
+
+impl DrawTarget for DisplayBuffer {
+    type Color = BinaryColor;
+    type Error = core::convert::Infallible;
+
+    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
+    where
+        I: IntoIterator<Item = Pixel<Self::Color>>,
+    {
+        for Pixel(coord, color) in pixels {
+            let x = coord.x as u32;
+            let y = coord.y as u32;
+            if x < self.width && y < self.height {
+                match color {
+                    BinaryColor::On => self.set_pixel(x, y, Color::Black),
+                    BinaryColor::Off => self.set_pixel(x, y, Color::White),
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl OriginDimensions for DisplayBuffer {
+    fn size(&self) -> Size {
+        Size::new(self.width, self.height)
+    }
+}
 
 /// Display dimensions
 pub const EPD_WIDTH: u32 = 400;
@@ -77,6 +109,7 @@ impl DisplayBuffer {
             red_buffer: vec![0x00; buffer_size],   // No red by default
         }
     }
+    // --- Embedded-graphics integration ---
 
     pub fn clear(&mut self, color: Color) {
         match color {

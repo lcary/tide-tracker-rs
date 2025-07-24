@@ -9,6 +9,7 @@ pub struct CdevInputPin {
     line: gpio_cdev::LineHandle,
 }
 
+#[allow(dead_code)]
 impl CdevOutputPin {
     pub fn new(chip: &mut Chip, offset: u32) -> Result<Self, EpdError> {
         let line = chip
@@ -19,6 +20,7 @@ impl CdevOutputPin {
         Ok(Self { line })
     }
 }
+#[allow(dead_code)]
 impl CdevInputPin {
     pub fn new(chip: &mut Chip, offset: u32) -> Result<Self, EpdError> {
         let line = chip
