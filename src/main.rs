@@ -104,6 +104,15 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
         let renderer = tide_clock_lib::eink_renderer::EinkTideRenderer::new();
         renderer.render_chart(&mut display_buffer, tide_series);
 
+        // After rendering the chart, overlay the last update time/date
+        use chrono::Local;
+        let now = Local::now();
+        let time_str = now.format("%-m/%-d %-I:%M%p").to_string(); // e.g. "7/23 8:14PM"
+                                                                   // Overlay at top right, 10px from right, 10px from top (large font, aligned)
+        let overlay_x = 400 - 10 - (time_str.len() as u32 * 10); // 10px per char for large font
+        let overlay_y = 10; // Top margin
+        renderer.draw_large_text(&mut display_buffer, overlay_x, overlay_y, &time_str);
+
         // Debug: Check what we actually rendered
         let black_pixels = display_buffer
             .black_buffer()
@@ -286,205 +295,11 @@ fn add_geometric_test_patterns(buffer: &mut tide_clock_lib::epd4in2b_v2::Display
     );
 }
 
-/// Software SPI implementation using rppal GPIO bit-banging for e-ink displays
-/// This matches the approach used in Waveshare Python examples when SPI is disabled
-/// CS (Chip Select) is controlled separately by the EPD driver
-#[cfg(all(target_os = "linux", feature = "hardware"))]
-struct RppalSoftwareSpi {
-    mosi_pin: rppal::gpio::OutputPin,
-    sclk_pin: rppal::gpio::OutputPin,
-}
-
-#[cfg(all(target_os = "linux", feature = "hardware"))]
-impl RppalSoftwareSpi {
-    fn new(gpio: &rppal::gpio::Gpio, mosi_gpio: u8, sclk_gpio: u8) -> anyhow::Result<Self> {
-        eprintln!("🔧 Creating software SPI using GPIO pins:");
-        eprintln!("   MOSI (Data): GPIO {}", mosi_gpio);
-        eprintln!("   SCLK (Clock): GPIO {}", sclk_gpio);
-        eprintln!("   CS (Chip Select): Controlled by EPD driver");
-
-        let mosi_pin = gpio
-            .get(mosi_gpio)
-            .map_err(|e| anyhow::anyhow!("Failed to get MOSI pin GPIO {}: {}", mosi_gpio, e))?
-            .into_output();
-
-        let sclk_pin = gpio
-            .get(sclk_gpio)
-            .map_err(|e| anyhow::anyhow!("Failed to get SCLK pin GPIO {}: {}", sclk_gpio, e))?
-            .into_output();
-
-        Ok(RppalSoftwareSpi { mosi_pin, sclk_pin })
-    }
-
-    fn write_byte(&mut self, byte: u8) -> anyhow::Result<()> {
-        // Note: CS pin is controlled by the EPD driver, not here
-
-        // Send 8 bits, MSB first
-        for i in (0..8).rev() {
-            // Set data line
-            if (byte >> i) & 1 == 1 {
-                self.mosi_pin.set_high();
-            } else {
-                self.mosi_pin.set_low();
-            }
-
-            // Clock pulse: low -> high -> low
-            self.sclk_pin.set_low();
-            std::thread::sleep(std::time::Duration::from_nanos(500)); // Slower timing for reliability
-            self.sclk_pin.set_high();
-            std::thread::sleep(std::time::Duration::from_nanos(500)); // Slower timing for reliability
-            self.sclk_pin.set_low();
-        }
-
-        // Small delay between bytes for display processing
-        std::thread::sleep(std::time::Duration::from_micros(1));
-
-        Ok(())
-    }
-
-    fn read_byte(&mut self) -> anyhow::Result<u8> {
-        // For SPI read, we need to send dummy bytes while reading MISO
-        // E-ink displays typically don't use MISO, so this is a simplified implementation
-        eprintln!("🔍 Attempting SPI read (dummy implementation for e-ink)");
-
-        // Note: CS pin is controlled by the EPD driver, not here
-
-        let mut _result = 0u8;
-
-        // Read 8 bits, MSB first (dummy implementation - just return 0x00 for now)
-        for _i in (0..8).rev() {
-            // Clock pulse: low -> high -> low
-            self.sclk_pin.set_low();
-            std::thread::sleep(std::time::Duration::from_nanos(500));
-            self.sclk_pin.set_high();
-            std::thread::sleep(std::time::Duration::from_nanos(500));
-            self.sclk_pin.set_low();
-
-            // Shift result (dummy read - no actual MISO pin)
-            _result <<= 1;
-        }
-
-        // Small delay between bytes
-        std::thread::sleep(std::time::Duration::from_micros(1));
-
-        // Return dummy value - most e-ink displays don't actually respond to reads
-        Ok(0x00)
-    }
-}
-
-// Implement our custom EPD SoftwareSpi trait for RppalSoftwareSpi
-#[cfg(all(target_os = "linux", feature = "hardware"))]
-impl tide_clock_lib::epd4in2b_v2::SoftwareSpi for RppalSoftwareSpi {
-    fn write_byte(&mut self, byte: u8) -> Result<(), tide_clock_lib::epd4in2b_v2::EpdError> {
-        self.write_byte(byte)
-            .map_err(|e| tide_clock_lib::epd4in2b_v2::EpdError(e.to_string()))
-    }
-
-    fn read_byte(&mut self) -> Result<u8, tide_clock_lib::epd4in2b_v2::EpdError> {
-        self.read_byte()
-            .map_err(|e| tide_clock_lib::epd4in2b_v2::EpdError(e.to_string()))
-    }
-}
-
-// Define custom error types for embedded-hal compatibility
-
-/// Wrapper to make rppal OutputPin compatible with our custom EPD driver
-#[cfg(all(target_os = "linux", feature = "hardware"))]
-struct RppalOutputPin {
-    pin: rppal::gpio::OutputPin,
-}
-
-#[cfg(all(target_os = "linux", feature = "hardware"))]
-impl RppalOutputPin {
-    fn new(pin: rppal::gpio::OutputPin) -> Self {
-        Self { pin }
-    }
-}
-
-#[cfg(all(target_os = "linux", feature = "hardware"))]
-impl tide_clock_lib::epd4in2b_v2::GpioPin for RppalOutputPin {
-    fn set_low(&mut self) -> Result<(), tide_clock_lib::epd4in2b_v2::EpdError> {
-        self.pin.set_low();
-        Ok(())
-    }
-
-    fn set_high(&mut self) -> Result<(), tide_clock_lib::epd4in2b_v2::EpdError> {
-        self.pin.set_high();
-        Ok(())
-    }
-}
-
-/// Wrapper to make rppal InputPin compatible with our custom EPD driver
-#[cfg(all(target_os = "linux", feature = "hardware"))]
-struct RppalInputPin {
-    pin: rppal::gpio::InputPin,
-}
-
-#[cfg(all(target_os = "linux", feature = "hardware"))]
-impl RppalInputPin {
-    fn new(pin: rppal::gpio::InputPin) -> Self {
-        Self { pin }
-    }
-}
-
-#[cfg(all(target_os = "linux", feature = "hardware"))]
-impl tide_clock_lib::epd4in2b_v2::InputPin for RppalInputPin {
-    fn is_high(&self) -> Result<bool, tide_clock_lib::epd4in2b_v2::EpdError> {
-        Ok(self.pin.is_high())
-    }
-}
-
-/// Test the e-ink renderer layout without actual hardware
-/// This function creates a display buffer and renders the tide chart,
-/// then outputs debug information about positioning and layout
-fn test_eink_renderer(tide_series: &TideSeries) {
-    use tide_clock_lib::eink_renderer::EinkTideRenderer;
-    use tide_clock_lib::epd4in2b_v2::{Color, DisplayBuffer};
-
-    eprintln!("🧪 Testing e-ink renderer layout and positioning...");
-    eprintln!("📊 Creating 400x300 display buffer...");
-
-    // Create a mock display buffer
-    let mut buffer = DisplayBuffer::new(400, 300);
-
-    // Clear buffer to white
-    eprintln!("🖼️  Clearing buffer to white...");
-    for y in 0..300 {
-        for x in 0..400 {
-            buffer.set_pixel(x, y, Color::White);
-        }
-    }
-
-    // Create renderer and render chart
-    let renderer = EinkTideRenderer::new();
-    eprintln!("🎨 Rendering tide chart with current positioning...");
-    renderer.render_chart(&mut buffer, tide_series);
-
-    eprintln!("✅ E-ink renderer test completed successfully!");
-    eprintln!("📐 Layout analysis:");
-    eprintln!("   - Display size: 400x300 pixels");
-    eprintln!("   - Margin: 20 pixels (increased from 15)");
-    eprintln!("   - Chart area: 360x260 pixels at (20,20)");
-    eprintln!("   - X-axis labels positioned 10px below X-axis line");
-    eprintln!("   - Y-axis labels positioned 40px left of Y-axis line");
-    eprintln!("   - Border removed for cleaner look and no overlap");
-    eprintln!("");
-    eprintln!("🔍 Key improvements:");
-    eprintln!("   ✓ Increased margin from 15px to 20px for more label space");
-    eprintln!("   ✓ Removed chart border entirely - axes provide structure");
-    eprintln!("   ✓ X-axis labels moved 10px below axis (was 5px)");
-    eprintln!("   ✓ Y-axis labels moved 40px left (was 35px)");
-    eprintln!("   ✓ Enhanced bold text rendering for better contrast");
-    eprintln!("   ✓ Dotted vertical line through 'Now' point for clarity");
-}
-
 /// Main application entry point.
 fn main() -> anyhow::Result<()> {
     // Parse command line arguments
     // Development mode: render to stdout for testing without hardware
     let development_mode = env::args().any(|arg| arg == "--stdout");
-    // Test e-ink mode: test e-ink renderer without hardware
-    let test_eink_mode = env::args().any(|arg| arg == "--test-eink");
 
     // Create Tokio runtime for async operations
     let rt = tokio::runtime::Runtime::new()?;
@@ -505,12 +320,6 @@ fn main() -> anyhow::Result<()> {
     // Development mode: ASCII output for testing
     if development_mode {
         draw_ascii(&tide_series);
-        return Ok(());
-    }
-
-    // Test e-ink mode: Test e-ink renderer layout without hardware
-    if test_eink_mode {
-        test_eink_renderer(&tide_series);
         return Ok(());
     }
 
