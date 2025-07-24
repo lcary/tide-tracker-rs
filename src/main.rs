@@ -89,92 +89,81 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
     let mut display_buffer = DisplayBuffer::new(400, 300);
     // Buffer is already initialized to white by default - no need to clear again
 
-    // Choose rendering mode: true = test patterns, false = tide chart
-    // let test_mode = true; // Start with simple test pattern to debug persistence
-    let test_mode = false; // Complex tide chart - test this after simple patterns work
+    eprintln!("📊 CHART MODE: Rendering tide chart...");
 
-    if test_mode {
-        eprintln!("🧪 TEST MODE: Adding geometric test patterns...");
-        add_geometric_test_patterns(&mut display_buffer);
-    } else {
-        eprintln!("📊 CHART MODE: Rendering tide chart...");
+    // First, clear the display to remove any previous content (like alternating stripes)
+    eprintln!("🧹 Clearing display to remove previous content...");
+    epd.clear()?;
+    eprintln!("✅ Display cleared successfully");
 
-        // First, clear the display to remove any previous content (like alternating stripes)
-        eprintln!("🧹 Clearing display to remove previous content...");
-        epd.clear()?;
-        eprintln!("✅ Display cleared successfully");
+    let renderer = tide_clock_lib::eink_renderer::EinkTideRenderer::new();
+    // New API: pass epd, display_buffer, tide_series
+    renderer.render_chart(&mut epd, &mut display_buffer, tide_series);
 
-        let renderer = tide_clock_lib::eink_renderer::EinkTideRenderer::new();
-        // New API: pass epd, display_buffer, tide_series
-        renderer.render_chart(&mut epd, &mut display_buffer, tide_series);
+    // Overlay the last update time/date using embedded-graphics Text primitive
+    use chrono::Local;
+    use embedded_graphics::mono_font::iso_8859_1::FONT_10X20;
+    use embedded_graphics::{
+        mono_font::MonoTextStyle, pixelcolor::BinaryColor, prelude::*, text::Text,
+    };
 
-        // Overlay the last update time/date using embedded-graphics Text primitive
-        use chrono::Local;
-        use embedded_graphics::mono_font::iso_8859_1::FONT_10X20;
-        use embedded_graphics::{
-            mono_font::MonoTextStyle, pixelcolor::BinaryColor, prelude::*, text::Text,
-        };
+    let now = Local::now();
+    let time_str = now.format("%-m/%-d %-I:%M%p").to_string(); // e.g. "7/23 8:14PM"
+                                                               // Overlay at top right, 10px from right, 10px from top
+    let char_width = 10; // FONT_10X20 width
+    let overlay_x = 400 - 10 - (time_str.len() as i32 * char_width);
+    let overlay_y = 10;
+    let style = MonoTextStyle::new(&FONT_10X20, BinaryColor::On);
+    Text::new(&time_str, Point::new(overlay_x, overlay_y + 16), style)
+        .draw(&mut display_buffer)
+        .ok();
 
-        let now = Local::now();
-        let time_str = now.format("%-m/%-d %-I:%M%p").to_string(); // e.g. "7/23 8:14PM"
-                                                                   // Overlay at top right, 10px from right, 10px from top
-        let char_width = 10; // FONT_10X20 width
-        let overlay_x = 400 - 10 - (time_str.len() as i32 * char_width);
-        let overlay_y = 10;
-        let style = MonoTextStyle::new(&FONT_10X20, BinaryColor::On);
-        Text::new(&time_str, Point::new(overlay_x, overlay_y + 16), style)
-            .draw(&mut display_buffer)
-            .ok();
+    // Debug: Check what we actually rendered
+    let black_pixels = display_buffer
+        .black_buffer()
+        .iter()
+        .map(|&b| b.count_zeros())
+        .sum::<u32>();
+    let red_pixels = display_buffer
+        .red_buffer()
+        .iter()
+        .map(|&b| b.count_ones())
+        .sum::<u32>();
+    eprintln!(
+        "📊 Rendered buffer: {} black pixels, {} red pixels",
+        black_pixels, red_pixels
+    );
 
-        // Debug: Check what we actually rendered
-        let black_pixels = display_buffer
+    // Sample a few bytes from the middle of the buffer to verify content
+    let mid_offset = display_buffer.black_buffer().len() / 2;
+    eprintln!(
+        "📊 Buffer sample (middle): black={:02X} {:02X} {:02X}, red={:02X} {:02X} {:02X}",
+        display_buffer.black_buffer().get(mid_offset).unwrap_or(&0),
+        display_buffer
             .black_buffer()
-            .iter()
-            .map(|&b| b.count_zeros())
-            .sum::<u32>();
-        let red_pixels = display_buffer
+            .get(mid_offset + 1)
+            .unwrap_or(&0),
+        display_buffer
+            .black_buffer()
+            .get(mid_offset + 2)
+            .unwrap_or(&0),
+        display_buffer.red_buffer().get(mid_offset).unwrap_or(&0),
+        display_buffer
             .red_buffer()
-            .iter()
-            .map(|&b| b.count_ones())
-            .sum::<u32>();
-        eprintln!(
-            "📊 Rendered buffer: {} black pixels, {} red pixels",
-            black_pixels, red_pixels
-        );
+            .get(mid_offset + 1)
+            .unwrap_or(&0),
+        display_buffer
+            .red_buffer()
+            .get(mid_offset + 2)
+            .unwrap_or(&0)
+    );
 
-        // Sample a few bytes from the middle of the buffer to verify content
-        let mid_offset = display_buffer.black_buffer().len() / 2;
-        eprintln!(
-            "📊 Buffer sample (middle): black={:02X} {:02X} {:02X}, red={:02X} {:02X} {:02X}",
-            display_buffer.black_buffer().get(mid_offset).unwrap_or(&0),
-            display_buffer
-                .black_buffer()
-                .get(mid_offset + 1)
-                .unwrap_or(&0),
-            display_buffer
-                .black_buffer()
-                .get(mid_offset + 2)
-                .unwrap_or(&0),
-            display_buffer.red_buffer().get(mid_offset).unwrap_or(&0),
-            display_buffer
-                .red_buffer()
-                .get(mid_offset + 1)
-                .unwrap_or(&0),
-            display_buffer
-                .red_buffer()
-                .get(mid_offset + 2)
-                .unwrap_or(&0)
-        );
-
-        // Check if the buffer looks inverted (if all bytes are 0xFF, it means white background)
-        let first_few_black =
-            &display_buffer.black_buffer()[..16.min(display_buffer.black_buffer().len())];
-        let all_ff = first_few_black.iter().all(|&b| b == 0xFF);
-        if all_ff {
-            eprintln!(
-                "⚠️  WARNING: Buffer appears to be all 0xFF (white) - may need bit inversion"
-            );
-        }
+    // Check if the buffer looks inverted (if all bytes are 0xFF, it means white background)
+    let first_few_black =
+        &display_buffer.black_buffer()[..16.min(display_buffer.black_buffer().len())];
+    let all_ff = first_few_black.iter().all(|&b| b == 0xFF);
+    if all_ff {
+        eprintln!("⚠️  WARNING: Buffer appears to be all 0xFF (white) - may need bit inversion");
     }
 
     eprintln!("📤 Updating e-ink display...");
@@ -221,72 +210,6 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
     eprintln!("   The image should remain on the display indefinitely");
 
     Ok(())
-}
-
-/// Add a VERY simple test pattern for reliable debugging
-#[cfg(all(target_os = "linux", feature = "hardware"))]
-fn add_geometric_test_patterns(buffer: &mut tide_clock_lib::epd4in2b_v2::DisplayBuffer) {
-    use tide_clock_lib::epd4in2b_v2::Color;
-
-    eprintln!("🎨 Adding SIMPLE BORDER test pattern for reliable debugging...");
-
-    // Test: Just a simple 5px border (less aggressive than full black screen)
-    eprintln!("   ⬛ Drawing simple 5px border...");
-    for thickness in 0..5 {
-        // Top and bottom borders
-        for x in 0..400 {
-            buffer.set_pixel(x, thickness, Color::Black); // Top border
-            buffer.set_pixel(x, 299 - thickness, Color::Black); // Bottom border
-        }
-        // Left and right borders
-        for y in 0..300 {
-            buffer.set_pixel(thickness, y, Color::Black); // Left border
-            buffer.set_pixel(399 - thickness, y, Color::Black); // Right border
-        }
-    }
-
-    /*
-    // Alternative: Just fill the entire screen black to see if anything shows up
-    eprintln!("   ⬛ TEST: Filling entire screen black...");
-    for x in 0..400 {
-        for y in 0..300 {
-            buffer.set_pixel(x, y, Color::Black);
-        }
-    }
-    */
-
-    eprintln!("✅ Simple 5px border pattern added - should be clearly visible");
-
-    // Debug: Check if buffer actually has data
-    let black_buffer = buffer.black_buffer();
-    let red_buffer = buffer.red_buffer();
-    let mut black_pixels = 0;
-    let mut red_pixels = 0;
-
-    for &byte in black_buffer {
-        black_pixels += byte.count_zeros() as usize; // 0 bits are black pixels
-    }
-    for &byte in red_buffer {
-        red_pixels += byte.count_ones() as usize; // 1 bits are red pixels
-    }
-
-    eprintln!(
-        "   📊 Buffer contains: {} black pixels, {} red pixels",
-        black_pixels, red_pixels
-    );
-    if black_pixels == 0 && red_pixels == 0 {
-        eprintln!("   ⚠️  WARNING: Buffer appears to be empty - no pixels set!");
-    }
-
-    // Debug: Show first few bytes of buffers to verify data
-    eprintln!(
-        "   🔍 First 8 bytes of black buffer: {:02X?}",
-        &black_buffer[..8.min(black_buffer.len())]
-    );
-    eprintln!(
-        "   🔍 First 8 bytes of red buffer: {:02X?}",
-        &red_buffer[..8.min(red_buffer.len())]
-    );
 }
 
 /// Main application entry point.
