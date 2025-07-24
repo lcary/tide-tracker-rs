@@ -108,7 +108,7 @@ mod tests {
     #[test]
     fn test_approximate_changes_with_time() {
         // Midnight UTC
-        let t0 = Utc.ymd(2025, 7, 24).and_hms(0, 0, 0);
+        let t0 = Utc.with_ymd_and_hms(2025, 7, 24, 0, 0, 0).unwrap();
         let series0 = approximate(Some(t0));
         let now_sample0 = series0.samples.iter().find(|s| s.mins_rel == 0).unwrap();
 
@@ -147,7 +147,7 @@ mod tests {
     #[test]
     fn test_approximate_known_high_and_low() {
         // Pick a time and check if we can get a high or low at mins_rel=0
-        let t0 = Utc.ymd(2025, 7, 24).and_hms(0, 0, 0);
+        let t0 = Utc.with_ymd_and_hms(2025, 7, 24, 0, 0, 0).unwrap();
         let series = approximate(Some(t0));
         let now_sample = series.samples.iter().find(|s| s.mins_rel == 0).unwrap();
         // Should be within the expected range for Portland, ME
