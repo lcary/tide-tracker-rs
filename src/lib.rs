@@ -1,35 +1,35 @@
-//! # Tide Tracker Core Library
-//!
-//! This library provides the foundational data structures and types for the tide tracker
-//! application. It's designed for extreme memory efficiency on embedded systems like
-//! the Raspberry Pi Zero 2 W (512 MB RAM total).
-//!
-//! ## Design Philosophy
-//!
-//! ### Memory Efficiency
-//! - **Fixed-size data structures**: All containers use `Vec::with_capacity(145)` to
-//!   pre-allocate exactly the needed memory for 24 hours of 10-minute samples
-//! - **Minimal allocations**: Uses primitive types (`i16`, `f32`) to minimize memory overhead
-//! - **Serialization-friendly**: Structures implement `Serialize`/`Deserialize` for efficient
-//!   binary caching without additional heap allocations
-//!
-//! ### Temporal Resolution
-//! The application samples tide data every 10 minutes for 24 hours:
-//! - **145 samples total**: -720 to +720 minutes (24 hours) in 10-minute increments
-//! - **Smooth visualization**: 10-minute granularity provides much smoother curves than
-//!   traditional hourly sampling, critical for accurate tide prediction display
-//! - **Current time marker**: Sample with `mins_rel == 0` represents "now"
-//!
-//! ### Data Flow
-//! 1. **Online**: Fetch hourly NOAA data → interpolate to 10-minute grid → cache → display
-//! 2. **Offline**: Use mathematical fallback model → mark as offline → display
-//! 3. **Memory**: Peak usage < 1MB across entire data pipeline
-//!
-//! ## Core Types
-//!
-//! The library exports two primary types optimized for the embedded target:
-//! - [`Sample`]: A single tide measurement at a specific time
-//! - [`TideSeries`]: Complete 24-hour dataset with offline status indicator
+// # Tide Tracker Core Library
+//
+// This library provides the foundational data structures and types for the tide tracker
+// application. It's designed for extreme memory efficiency on embedded systems like
+// the Raspberry Pi Zero 2 W (512 MB RAM total).
+//
+// ## Design Philosophy
+//
+// ### Memory Efficiency
+// - **Fixed-size data structures**: All containers use `Vec::with_capacity(145)` to
+//   pre-allocate exactly the needed memory for 24 hours of 10-minute samples
+// - **Minimal allocations**: Uses primitive types (`i16`, `f32`) to minimize memory overhead
+// - **Serialization-friendly**: Structures implement `Serialize`/`Deserialize` for efficient
+//   binary caching without additional heap allocations
+//
+// ### Temporal Resolution
+// The application samples tide data every 10 minutes for 24 hours:
+// - **145 samples total**: -720 to +720 minutes (24 hours) in 10-minute increments
+// - **Smooth visualization**: 10-minute granularity provides much smoother curves than
+//   traditional hourly sampling, critical for accurate tide prediction display
+// - **Current time marker**: Sample with `mins_rel == 0` represents "now"
+//
+// ### Data Flow
+// 1. **Online**: Fetch hourly NOAA data → interpolate to 10-minute grid → cache → display
+// 2. **Offline**: Use mathematical fallback model → mark as offline → display
+// 3. **Memory**: Peak usage < 1MB across entire data pipeline
+//
+// ## Core Types
+//
+// The library exports two primary types optimized for the embedded target:
+// - [`Sample`]: A single tide measurement at a specific time
+// - [`TideSeries`]: Complete 24-hour dataset with offline status indicator
 
 use serde::{Deserialize, Serialize};
 
@@ -38,6 +38,7 @@ pub mod config;
 pub mod eink_renderer;
 pub mod epd4in2b_v2;
 pub mod fallback;
+pub mod lunar;
 pub mod renderer;
 pub mod tide_data;
 

@@ -112,7 +112,7 @@ const TTL: u64 = 1800; // 30 minutes
 /// # async fn example() {
 /// let series = fetch().await.unwrap_or_else(|err| {
 ///     eprintln!("Failed to fetch tide data: {}", err);
-///     fallback::approximate()
+///     fallback::approximate(None)
 /// });
 /// # }
 /// ```

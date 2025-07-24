@@ -218,7 +218,7 @@ fn main() -> anyhow::Result<()> {
             eprintln!("Falling back to offline mathematical model");
 
             // Continue with synthetic data rather than crashing
-            fallback::approximate()
+            fallback::approximate(None)
         })
     });
 
