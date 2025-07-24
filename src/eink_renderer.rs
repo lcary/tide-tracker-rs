@@ -1083,3 +1083,9 @@ impl EinkTideRenderer {
         );
     }
 }
+
+impl Default for EinkTideRenderer {
+    fn default() -> Self {
+        Self::new()
+    }
+}

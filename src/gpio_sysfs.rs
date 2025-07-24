@@ -10,6 +10,7 @@ pub struct CdevInputPin {
 }
 
 impl CdevOutputPin {
+    #[allow(dead_code)]
     pub fn new(chip: &mut Chip, offset: u32) -> Result<Self, EpdError> {
         let line = chip
             .get_line(offset)
@@ -20,6 +21,7 @@ impl CdevOutputPin {
     }
 }
 impl CdevInputPin {
+    #[allow(dead_code)]
     pub fn new(chip: &mut Chip, offset: u32) -> Result<Self, EpdError> {
         let line = chip
             .get_line(offset)

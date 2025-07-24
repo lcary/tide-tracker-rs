@@ -14,10 +14,10 @@ mod hw_spi_spidev;
 // Re-export library types for internal use
 pub use tide_clock_lib::{config::Config, Sample, TideSeries};
 
-// Import new GPIO and SPI types for hardware mode
-use crate::gpio_sysfs::{CdevInputPin, CdevOutputPin};
-use crate::hw_spi_spidev::SpidevHwSpi;
-use anyhow::Context;
+// Remove unused GPIO and SPI imports
+// use crate::gpio_sysfs::{CdevInputPin, CdevOutputPin};
+// use crate::hw_spi_spidev::SpidevHwSpi;
+// use anyhow::Context;
 
 // Application dependencies
 use std::env;

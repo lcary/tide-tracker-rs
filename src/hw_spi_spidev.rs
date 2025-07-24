@@ -8,6 +8,7 @@ pub struct SpidevHwSpi {
 }
 
 impl SpidevHwSpi {
+    #[allow(dead_code)]
     pub fn new() -> Result<Self, EpdError> {
         let mut dev = Spidev::open("/dev/spidev0.0").map_err(|e| EpdError(e.to_string()))?;
 
