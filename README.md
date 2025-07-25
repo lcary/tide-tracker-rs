@@ -44,7 +44,7 @@ The project successfully cross-compiles for ARM targets.
 
 Build for Raspberry Pi using Docker with hardware features (e-ink display)
 ```
-./build_rpi.sh
+./scripts/build_rpi.sh
 ```
 (Runs `cross build --release --target=aarch64-unknown-linux-gnu --features hardware`)
 
@@ -121,7 +121,7 @@ Also install cross for cross-compilation: `cargo install cross`
 ### 2. Build
 
  - Start Docker
- - `./build_rpi.sh`
+ - `./scripts/build_rpi.sh`
  - `scp target/aarch64-unknown-linux-gnu/release/tide-tracker pi@0.0.0.0:~`
 
 ## Installation & Setup (on Pi)
