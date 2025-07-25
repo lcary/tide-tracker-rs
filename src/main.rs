@@ -100,6 +100,18 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
     // New API: pass epd, display_buffer, tide_series
     renderer.render_chart(&mut epd, &mut display_buffer, tide_series);
 
+    // --- Draw OFFLINE notice if needed ---
+    if tide_series.offline {
+        use embedded_graphics::mono_font::iso_8859_1::FONT_10X20;
+        use embedded_graphics::{
+            mono_font::MonoTextStyle, pixelcolor::BinaryColor, prelude::*, text::Text,
+        };
+        let style = MonoTextStyle::new(&FONT_10X20, BinaryColor::On);
+        Text::new("OFFLINE!", Point::new(10, 24), style)
+            .draw(&mut display_buffer)
+            .ok();
+    }
+
     // Overlay the last update time/date using embedded-graphics Text primitive
     use chrono::Local;
     use embedded_graphics::mono_font::iso_8859_1::FONT_10X20;
@@ -204,23 +216,29 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
 fn main() -> anyhow::Result<()> {
     // Parse command line arguments
     // Development mode: render to stdout for testing without hardware
-    let development_mode = env::args().any(|arg| arg == "--stdout");
+    let args: Vec<String> = env::args().collect();
+    let development_mode = args.iter().any(|arg| arg == "--stdout");
+    let test_offline_mode = args.iter().any(|arg| arg == "--test-offline");
 
     // Create Tokio runtime for async operations
     let rt = tokio::runtime::Runtime::new()?;
 
-    // Fetch tide data with automatic fallback on failure
-    // Network errors are expected and handled gracefully
-    let tide_series = rt.block_on(async {
-        tide_data::fetch().await.unwrap_or_else(|error| {
-            // Log fetch failure for debugging (visible in systemd journal)
-            eprintln!("Tide data fetch failed: {}", error);
-            eprintln!("Falling back to offline mathematical model");
-
-            // Continue with synthetic data rather than crashing
-            fallback::approximate()
+    // Fetch tide data with automatic fallback on failure, or force offline if requested
+    let tide_series = if test_offline_mode {
+        // Force offline fallback mode for testing: this sets offline=true in the returned TideSeries
+        eprintln!("[TEST] Forcing offline fallback mode (--test-offline flag set)");
+        fallback::approximate(None)
+    } else {
+        rt.block_on(async {
+            tide_data::fetch().await.unwrap_or_else(|error| {
+                // Log fetch failure for debugging (visible in systemd journal)
+                eprintln!("Tide data fetch failed: {}", error);
+                eprintln!("Falling back to offline mathematical model");
+                // Continue with synthetic data rather than crashing
+                fallback::approximate(None)
+            })
         })
-    });
+    };
 
     // Development mode: ASCII output for testing
     if development_mode {

@@ -18,25 +18,25 @@ use crate::fallback;
 /// typical of coastal areas (not too extreme, not too flat).
 #[test]
 fn fallback_produces_sane_tide_range() {
-    let series = fallback::approximate();
+    let series = fallback::approximate(None);
 
     // Extract all tide heights for analysis
     let heights: Vec<f32> = series.samples.iter().map(|s| s.tide_ft).collect();
     let min_height = heights.iter().fold(f32::INFINITY, |a, &b| a.min(b));
     let max_height = heights.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
 
-    // Verify reasonable tidal range (2.5 to 7.5 feet based on model)
+    // Verify reasonable tidal range for Portland, ME (NOAA harmonics)
     let tidal_range = max_height - min_height;
     assert!(
-        (4.0..=6.0).contains(&tidal_range),
-        "Tidal range {} is outside expected bounds (4.0-6.0 feet)",
+        (9.5..=11.0).contains(&tidal_range),
+        "Tidal range {} is outside expected bounds (9.5-11.0 feet)",
         tidal_range
     );
 
-    // Verify all heights are positive (above chart datum)
+    // Allow small negative heights due to harmonic phase (Portland, ME)
     assert!(
-        min_height > 0.0,
-        "Minimum tide height {} should be positive",
+        min_height > -0.5,
+        "Minimum tide height {} should be greater than -0.5 ft",
         min_height
     );
 
@@ -53,7 +53,7 @@ fn fallback_produces_sane_tide_range() {
 /// which is critical for accurate visualization and interpolation.
 #[test]
 fn samples_have_correct_10_minute_spacing() {
-    let series = fallback::approximate();
+    let series = fallback::approximate(None);
 
     // Check total sample count (24 hours * 6 samples/hour + 1)
     assert_eq!(
@@ -87,7 +87,7 @@ fn samples_have_correct_10_minute_spacing() {
 /// The current time marker is critical for user orientation on the display.
 #[test]
 fn current_time_marker_exists_and_unique() {
-    let series = fallback::approximate();
+    let series = fallback::approximate(None);
 
     // Find all samples at current time
     let current_samples: Vec<_> = series.samples.iter().filter(|s| s.mins_rel == 0).collect();
@@ -103,8 +103,8 @@ fn current_time_marker_exists_and_unique() {
 
     // Verify current sample has reasonable tide height
     assert!(
-        current_sample.tide_ft > 0.0 && current_sample.tide_ft < 10.0,
-        "Current tide height {} should be reasonable (0-10 feet)",
+        (-0.5..=10.0).contains(&current_sample.tide_ft),
+        "Current tide height {} should be reasonable (-0.5 to 10 feet)",
         current_sample.tide_ft
     );
 }
@@ -164,7 +164,7 @@ fn tide_series_handles_edge_cases() {
 /// should maintain reasonable smoothness properties for visualization.
 #[test]
 fn interpolation_produces_smooth_curves() {
-    let series = fallback::approximate();
+    let series = fallback::approximate(None);
 
     // Calculate first differences (rate of change between samples)
     let mut differences = Vec::new();
@@ -304,7 +304,7 @@ fn cache_staleness_detection_works() {
 /// that data structures use expected sizes and avoid unnecessary allocations.
 #[test]
 fn memory_usage_is_reasonable() {
-    let series = fallback::approximate();
+    let series = fallback::approximate(None);
 
     // Verify sample count is exactly what we expect (no extra allocations)
     assert_eq!(series.samples.len(), 145);
@@ -342,7 +342,7 @@ fn memory_usage_is_reasonable() {
 /// Critical for visualization - samples must be in chronological order.
 #[test]
 fn samples_are_chronologically_ordered() {
-    let series = fallback::approximate();
+    let series = fallback::approximate(None);
 
     // Verify samples are in ascending time order
     for window in series.samples.windows(2) {
@@ -370,7 +370,7 @@ mod performance_tests {
     #[test]
     fn fallback_generation_is_fast() {
         let start = Instant::now();
-        let _series = fallback::approximate();
+        let _series = fallback::approximate(None);
         let duration = start.elapsed();
 
         // Should complete in well under 1 second on any reasonable hardware
@@ -388,7 +388,7 @@ mod performance_tests {
     fn repeated_operations_dont_leak() {
         // Generate multiple series to check for memory accumulation
         for _ in 0..100 {
-            let _series = fallback::approximate();
+            let _series = fallback::approximate(None);
             // Memory should be freed after each iteration
         }
 
