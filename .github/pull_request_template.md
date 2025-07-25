@@ -27,8 +27,6 @@ Brief description of the changes in this PR.
 
 ## Hardware Compatibility
 - [ ] Tested on Raspberry Pi Zero 2 W
-- [ ] Tested on Raspberry Pi 4
-- [ ] Tested on x86_64 Linux
 - [ ] E-ink display functionality verified (if applicable)
 
 ## Checklist
@@ -36,15 +34,3 @@ Brief description of the changes in this PR.
 - [ ] I have performed a self-review of my own code
 - [ ] I have commented my code, particularly in hard-to-understand areas
 - [ ] I have made corresponding changes to the documentation
-- [ ] My changes generate no new warnings
-- [ ] Any dependent changes have been merged and published
-
-## Related Issues
-Fixes #(issue number)
-Related to #(issue number)
-
-## Screenshots/Output
-If applicable, add screenshots or terminal output showing the changes.
-
-## Additional Notes
-Any additional information that reviewers should know.
