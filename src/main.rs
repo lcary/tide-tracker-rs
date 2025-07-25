@@ -64,9 +64,23 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
     let rst = CdevOutputPin::new(&mut chip, hw.rst_pin as u32)?;
     let busy = CdevInputPin::new(&mut chip, hw.busy_pin as u32)?;
 
-    // Use kernel SPI driver (CS handled by kernel)
-    let spi = SpidevHwSpi::new()?;
-    // Pass None::<CdevOutputPin> for CS pin to satisfy type inference
+    // SPI setup: use hardware CS for GPIO 8 (CE0) or 7 (CE1), manual CS for others
+    let use_hw_cs = hw.cs_pin == 8 || hw.cs_pin == 7;
+    let spi: Box<dyn tide_clock_lib::epd4in2b_v2::SoftwareSpi> = if use_hw_cs {
+        if hw.cs_pin == 8 {
+            Box::new(SpidevHwSpi::new_ce0()?)
+        } else {
+            Box::new(SpidevHwSpi::new_ce1()?)
+        }
+    } else {
+        // Warn if user tries to use manual CS on a kernel-controlled pin
+        if hw.cs_pin == 8 || hw.cs_pin == 7 {
+            eprintln!("⚠️  Config error: cs_pin {} is kernel-controlled (CE0/CE1), manual CS will not work!", hw.cs_pin);
+        }
+        let spi = SpidevHwSpi::new_ce0()?; // Default to CE0 for manual CS
+        let cs = CdevOutputPin::new(&mut chip, hw.cs_pin as u32)?;
+        Box::new(crate::hw_spi_spidev::SpidevManualCs::new(spi, cs))
+    };
     let mut epd = Epd4in2bV2::new(spi, None::<CdevOutputPin>, dc, rst, busy);
 
     match epd.init() {
