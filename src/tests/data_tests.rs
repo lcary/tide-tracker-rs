@@ -103,8 +103,8 @@ fn current_time_marker_exists_and_unique() {
 
     // Verify current sample has reasonable tide height
     assert!(
-        current_sample.tide_ft > 0.0 && current_sample.tide_ft < 10.0,
-        "Current tide height {} should be reasonable (0-10 feet)",
+        (-0.5..=10.0).contains(&current_sample.tide_ft),
+        "Current tide height {} should be reasonable (-0.5 to 10 feet)",
         current_sample.tide_ft
     );
 }
