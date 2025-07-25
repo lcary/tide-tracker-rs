@@ -60,9 +60,9 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
     let hw = &config.display.hardware;
 
     // Only request DC, RST, BUSY via gpiod for hardware SPI
-    let dc = CdevOutputPin::new(&mut chip, hw.dc_pin as u32)?;
-    let rst = CdevOutputPin::new(&mut chip, hw.rst_pin as u32)?;
-    let busy = CdevInputPin::new(&mut chip, hw.busy_pin as u32)?;
+    let dc = CdevOutputPin::new(&mut chip, hw.dc_pin)?;
+    let rst = CdevOutputPin::new(&mut chip, hw.rst_pin)?;
+    let busy = CdevInputPin::new(&mut chip, hw.busy_pin)?;
 
     // SPI setup: use hardware CS for GPIO 8 (CE0) or 7 (CE1), manual CS for others
     let use_hw_cs = hw.cs_pin == 8 || hw.cs_pin == 7;
@@ -78,7 +78,7 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
             eprintln!("⚠️  Config error: cs_pin {} is kernel-controlled (CE0/CE1), manual CS will not work!", hw.cs_pin);
         }
         let spi = SpidevHwSpi::new_ce0()?; // Default to CE0 for manual CS
-        let cs = CdevOutputPin::new(&mut chip, hw.cs_pin as u32)?;
+        let cs = CdevOutputPin::new(&mut chip, hw.cs_pin)?;
         Box::new(crate::hw_spi_spidev::SpidevManualCs::new(spi, cs))
     };
     let mut epd = Epd4in2bV2::new(spi, None::<CdevOutputPin>, dc, rst, busy);
