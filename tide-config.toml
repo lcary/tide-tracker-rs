@@ -46,12 +46,14 @@ height = 300
 # Font height in pixels (affects text size and spacing)
 font_height = 20
 
-# Hardware GPIO pin configuration for e-ink display
+ # Hardware GPIO pin configuration for e-ink display
 # Default wiring for Waveshare 4.2" display on Raspberry Pi Zero 2 W
-# Do NOT configure cs_pin here when using hardware SPI; CS is managed by the kernel SPI driver.
-# Only set rst_pin, dc_pin, busy_pin below.
+# cs_pin = 8   # Default: uses spidev0.0 (CE0, GPIO 8, kernel-controlled)
+# cs_pin = 7   # Uses spidev0.1 (CE1, GPIO 7, kernel-controlled)
+# Any other pin → manual GPIO-toggled CS (for custom wiring or damaged CE0/CE1)
 [display.hardware]
-# cs_pin = 8   # REMOVE or comment out this line for hardware SPI
+# cs_pin = 8
+# cs_pin = 7
 rst_pin = 17
 dc_pin = 25
 busy_pin = 24

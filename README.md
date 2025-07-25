@@ -53,10 +53,6 @@ The project includes GitHub Actions workflows that automatically build ARM64 bin
 - Push to main branch triggers ARM64 cross-compilation
 - Release tags automatically build and upload ARM64 binaries
 
-### Cross-Compilation Notes
-
-- **Code Status**: ✅ All Rust code compiles successfully for ARM64
-- **Dependencies**: ✅ Hardware-specific deps are properly conditional
 - **Platform Separation**: ✅ macOS/Linux incompatibilities resolved
 - **Recommended Method**: Use `cross` (Option 1) for reliable builds
 - **Native Toolchain**: Requires `aarch64-unknown-linux-gnu-gcc` but may have dependency conflicts

@@ -51,15 +51,16 @@ pub struct DisplayConfig {
 /// Hardware GPIO pin configuration for e-ink display
 ///
 /// Default pin mapping for Waveshare 4.2" e-ink display on Raspberry Pi Zero 2 W:
-/// - CS (Chip Select): GPIO 8 (Pin 24) - SPI device selection
+/// - CS (Chip Select): GPIO 8 (Pin 24, CE0) - SPI device selection (kernel-controlled by default)
 /// - DC (Data/Command): GPIO 25 (Pin 22) - Data vs command mode  
 /// - RST (Reset): GPIO 17 (Pin 11) - Hardware reset signal
 /// - BUSY: GPIO 24 (Pin 18) - Display busy status indicator
 ///
-/// Override these values if your wiring differs or hardware has conflicts.
+/// You may override `cs_pin` (e.g., to 7 for CE1/SS1/manual CS) if GPIO 8 is damaged.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct HardwareConfig {
-    /// SPI Chip Select pin (default: GPIO 8, Pin 24)
+    /// SPI Chip Select pin (default: GPIO 8, Pin 24, CE0). If not 8, toggled manually.
+    #[serde(default = "default_cs_pin")]
     pub cs_pin: u32,
     /// Data/Command control pin (default: GPIO 25, Pin 22)
     pub dc_pin: u32,
@@ -67,6 +68,10 @@ pub struct HardwareConfig {
     pub rst_pin: u32,
     /// Busy status pin (default: GPIO 24, Pin 18)
     pub busy_pin: u32,
+}
+
+fn default_cs_pin() -> u32 {
+    8
 }
 
 impl Default for Config {

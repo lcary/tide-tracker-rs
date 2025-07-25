@@ -67,6 +67,16 @@ pub trait SoftwareSpi {
     fn read_byte(&mut self) -> Result<u8, EpdError>;
 }
 
+// Allow Box<dyn SoftwareSpi> to be used as SPI in Epd4in2bV2
+impl<T: SoftwareSpi + ?Sized> SoftwareSpi for Box<T> {
+    fn write_byte(&mut self, data: u8) -> Result<(), EpdError> {
+        (**self).write_byte(data)
+    }
+    fn read_byte(&mut self) -> Result<u8, EpdError> {
+        (**self).read_byte()
+    }
+}
+
 /// Trait for GPIO pin interface
 pub trait GpioPin {
     fn set_high(&mut self) -> Result<(), EpdError>;
