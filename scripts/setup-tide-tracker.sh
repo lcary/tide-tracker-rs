@@ -196,8 +196,42 @@ EOF
     fi
   fi
 
+  ### ───────────────
+  ### 6. Optional WiFi fallback portal
+  ### ───────────────
+  if [[ "$INSTALL_WIFI_PORTAL" -eq 1 ]]; then
+    WIFI_VER="v4.11.84"
+    TMPDIR="$(mktemp -d)"
+    curl -L \
+      "https://github.com/balena-os/wifi-connect/releases/download/${WIFI_VER}/wifi-connect-aarch64-unknown-linux-gnu.tar.gz" \
+      | tar -xz -C "$TMPDIR"
+    install -Dm755 "$TMPDIR/wifi-connect" /usr/local/bin/wifi-connect
+
+    cat >/etc/systemd/system/wifi-connect.service <<'EOF'
+[Unit]
+Description=WiFi Connect captive-portal fallback
+After=network.target
+Wants=network-online.target
+ConditionPathExists=!/etc/tide-tracker/disable-portal
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/wifi-connect \
+           --portal-ssid TideTracker-Setup \
+           --portal-passphrase pi-tides \
+           --timeout 30 \
+           --activity-timeout 900 \
+           --ui-directory /usr/share/wifi-connect/ui
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+    systemctl enable wifi-connect.service
+  fi
+
   ### ──────────────────────────
-  ### 6. Finish
+  ### 7. Finish
   ### ──────────────────────────
   echo '✅  Tide Tracker system services installed.'
   echo '   → Reboot now? (y/N)'
