@@ -31,6 +31,9 @@ case "$ARCH" in
     arm64|aarch64)
         ASSET="aarch64-unknown-linux-gnu"
         ;;
+    armhf|arm)
+        ASSET="linux-rpi"
+        ;;
     *)
         echo "Unsupported architecture: $ARCH"
         exit 1
@@ -67,13 +70,14 @@ rm -rf "$TEMP_DIR"
 
 # Install wifi-connect-loop.sh script
 echo "Installing wifi-connect-loop.sh script..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p /usr/local/bin
-cp "$(dirname "$0")/wifi-connect-loop.sh" /usr/local/bin/wifi-connect-loop.sh
+cp "${SCRIPT_DIR}/wifi-connect-loop.sh" /usr/local/bin/wifi-connect-loop.sh
 chmod +x /usr/local/bin/wifi-connect-loop.sh
 
 # Install systemd service
 echo "Installing systemd service..."
-cp "$(dirname "$0")/systemd/wifi-connect.service" /etc/systemd/system/wifi-connect.service
+cp "${SCRIPT_DIR}/systemd/wifi-connect.service" /etc/systemd/system/wifi-connect.service
 systemctl daemon-reload
 systemctl enable wifi-connect.service
 
