@@ -29,10 +29,7 @@ systemctl enable --now NetworkManager.service
 ARCH=$(dpkg --print-architecture)
 case "$ARCH" in
     arm64|aarch64)
-        ASSET="linux-arm64"
-        ;;
-    armhf|arm)
-        ASSET="linux-rpi"
+        ASSET="aarch64-unknown-linux-gnu"
         ;;
     *)
         echo "Unsupported architecture: $ARCH"
@@ -42,8 +39,7 @@ esac
 
 echo "Detected architecture: $ARCH, using asset: $ASSET"
 
-# Download WiFi Connect
-DOWNLOAD_URL="https://github.com/balena-os/wifi-connect/releases/download/v${WIFI_CONNECT_VERSION}/wifi-connect-v${WIFI_CONNECT_VERSION}-${ASSET}.tar.gz"
+DOWNLOAD_URL="https://github.com/balena-os/wifi-connect/releases/download/v${WIFI_CONNECT_VERSION}/wifi-connect-${ASSET}.tar.gz"
 TEMP_DIR=$(mktemp -d)
 
 echo "Downloading WiFi Connect v${WIFI_CONNECT_VERSION}..."
