@@ -70,7 +70,7 @@ rm -rf "$TEMP_DIR"
 
 # Install wifi-connect-loop.sh script
 echo "Installing wifi-connect-loop.sh script..."
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(realpath "$(dirname "${BASH_SOURCE[0]}")")"
 mkdir -p /usr/local/bin
 cp "${SCRIPT_DIR}/wifi-connect-loop.sh" /usr/local/bin/wifi-connect-loop.sh
 chmod +x /usr/local/bin/wifi-connect-loop.sh
