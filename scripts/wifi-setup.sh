@@ -48,6 +48,9 @@ TEMP_DIR=$(mktemp -d)
 echo "Downloading WiFi Connect v${WIFI_CONNECT_VERSION}..."
 curl -L -o "${TEMP_DIR}/wifi-connect.tar.gz" "$DOWNLOAD_URL"
 
+# Save current directory
+curdir=$(pwd)
+
 # Extract and install binary
 echo "Installing WiFi Connect binary..."
 cd "$TEMP_DIR"
@@ -65,11 +68,15 @@ else
     echo "Warning: UI directory not found in release archive"
 fi
 
+# Return to original directory
+cd "$curdir"
+
 # Cleanup
 rm -rf "$TEMP_DIR"
 
 # Install wifi-connect-loop.sh script
 echo "Installing wifi-connect-loop.sh script..."
+
 SCRIPT_DIR="$(realpath "$(dirname "${BASH_SOURCE[0]}")")"
 mkdir -p /usr/local/bin
 cp "${SCRIPT_DIR}/wifi-connect-loop.sh" /usr/local/bin/wifi-connect-loop.sh
