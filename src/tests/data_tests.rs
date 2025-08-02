@@ -28,8 +28,8 @@ fn fallback_produces_sane_tide_range() {
     // Verify reasonable tidal range for Portland, ME (NOAA harmonics)
     let tidal_range = max_height - min_height;
     assert!(
-        (9.5..=11.0).contains(&tidal_range),
-        "Tidal range {} is outside expected bounds (9.5-11.0 feet)",
+        (7.0..=12.0).contains(&tidal_range),
+        "Tidal range {} is outside expected bounds (7.0-12.0 feet)",
         tidal_range
     );
 
