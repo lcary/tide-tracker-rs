@@ -11,6 +11,7 @@ A lean, memory-efficient tide tracking application for Raspberry Pi Zero 2 W wit
 - **ASCII development mode** for testing on macOS/Linux without hardware
 - **Robust caching** with 30-minute TTL to minimize network requests
 - **Systemd integration** for reliable scheduled updates
+- **WiFi Connect integration** for easy WiFi setup via captive portal
 
 ## Hardware Requirements (Optional)
 
@@ -28,6 +29,34 @@ sudo raspi-config
 # Interface Options → SPI → Enable
 # Interface Options → SSH → Enable
 sudo reboot
+```
+
+## WiFi Connect Integration
+
+WiFi Connect provides a captive portal for easy WiFi setup on headless devices. When no internet connection is detected, it automatically creates a "TideTracker-Setup" hotspot (password: "pi-tides") for configuration.
+
+### Installation
+```bash
+sudo ./scripts/wifi-setup.sh
+```
+
+### Usage
+- **Automatic**: Service runs on boot, activates portal when offline
+- **Manual**: `sudo systemctl start wifi-connect.service`
+- **Monitor**: `journalctl -u wifi-connect.service -f`
+- **Update**: `sudo ./scripts/wifi-update.sh` (updates connectivity script only)
+
+### Troubleshooting
+```bash
+# Check status
+systemctl status wifi-connect.service
+
+# Test connectivity  
+ping -c 3 1.1.1.1
+
+# Manual debug mode
+sudo systemctl stop wifi-connect.service
+sudo /usr/local/sbin/wifi-connect --portal-ssid "TideTracker-Setup" --portal-passphrase "pi-tides"
 ```
 
 ### Waveshare 4.2" E-ink Display
@@ -310,6 +339,19 @@ src/
 ├── renderer.rs      # E-ink and ASCII rendering
 └── tests/
     └── data_tests.rs # Unit tests
+
+scripts/
+├── wifi-setup.sh         # WiFi Connect installation script
+├── wifi-update.sh        # WiFi Connect update script
+├── wifi-connect-loop.sh  # Connectivity monitoring script
+└── systemd/
+    └── wifi-connect.service # Systemd service definition
+
+infra/
+└── image/           # Docker-based Pi image building
+    ├── Dockerfile
+    ├── build.sh
+    └── overlays/    # Rootfs overlay files
 ```
 
 ### Running Tests
