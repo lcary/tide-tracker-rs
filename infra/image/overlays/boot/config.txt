@@ -1,0 +1,14 @@
+# Enable SPI for e-ink display
+dtparam=spi=on
+
+# Enable SSH
+enable_uart=1
+
+# Enable watchdog
+dtparam=watchdog=on
+
+# Disable Bluetooth to free up UART
+dtoverlay=disable-bt
+
+# Reduce GPU memory split for headless operation
+gpu_mem=16

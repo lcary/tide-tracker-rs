@@ -1,0 +1,59 @@
+# Tide Tracker Configuration
+# 
+# NOAA Station Configuration
+# Find station IDs at: https://tidesandcurrents.noaa.gov/stations.html
+#
+# Some common stations:
+# 8418150 - Portland, ME (default)
+# 8410140 - Boston Harbor, MA  
+# 8443970 - Boston, MA
+# 8447930 - Bar Harbor, ME
+# 8413320 - Bar Harbor, Frenchman Bay, ME
+# 8454000 - Providence, RI
+# 8461490 - New London, CT
+# 8516945 - Kings Point, NY
+# 8518750 - The Battery, NY
+
+[station]
+# NOAA station ID for tide predictions
+id = "8418150"
+
+# Station name (for display/reference)
+name = "Portland, ME"
+
+# MLLW to Mean Sea Level offset in feet
+# This converts raw NOAA data to user-friendly heights above/below sea level
+# Find this value on the NOAA station page or use 0.0 to show raw MLLW values
+msl_offset = 4.9
+
+# Whether to display heights relative to Mean Sea Level (true) or MLLW (false)
+# false = Traditional tide chart display (0-9+ feet MLLW)
+# true = Heights relative to mean sea level (-5 to +5 feet MSL)
+show_msl = false
+# show_msl = true
+
+[display]
+# Chart time window in hours (shows -window to +window from current time)
+time_window_hours = 12
+
+# Update interval for cached data in minutes
+cache_ttl_minutes = 30
+
+# E-ink display dimensions (Waveshare 4.2" = 400x300 pixels)
+width = 400
+height = 300
+
+# Font height in pixels (affects text size and spacing)
+font_height = 20
+
+ # Hardware GPIO pin configuration for e-ink display
+# Default wiring for Waveshare 4.2" display on Raspberry Pi Zero 2 W
+# cs_pin = 8   # Default: uses spidev0.0 (CE0, GPIO 8, kernel-controlled)
+# cs_pin = 7   # Uses spidev0.1 (CE1, GPIO 7, kernel-controlled)
+# Any other pin → manual GPIO-toggled CS (for custom wiring or damaged CE0/CE1)
+[display.hardware]
+# cs_pin = 8
+# cs_pin = 7
+rst_pin = 17
+dc_pin = 25
+busy_pin = 24

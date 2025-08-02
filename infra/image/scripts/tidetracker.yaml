@@ -1,0 +1,24 @@
+image_name: tide-tracker
+distro: debian
+release: bookworm
+arch: arm64
+components: [main, contrib, non-free, non-free-firmware]
+firmware:
+  packages:
+    - firmware-brcm80211
+    - rpi-eeprom
+packages:
+  - network-manager
+  - openssh-server
+  - curl
+  - wget
+  - git
+  - watchdog
+  - systemd
+  - systemd-timesyncd
+services:
+  enabled:
+    - tide-tracker.service
+    - wifi-connect.service
+    - ssh.service
+    - systemd-timesyncd.service

@@ -1,0 +1,28 @@
+[Unit]
+Description=Tide Tracker e-paper display update
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/tide-tracker
+WorkingDirectory=/etc/tide-tracker
+Environment=RUST_LOG=info
+Environment=RUST_BACKTRACE=1
+User=pi
+Group=pi
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tide-tracker
+
+# Allow GPIO access
+SupplementaryGroups=gpio spi
+
+# Security (but allow GPIO access)
+NoNewPrivileges=false
+ProtectSystem=false
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

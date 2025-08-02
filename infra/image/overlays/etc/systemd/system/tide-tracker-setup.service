@@ -1,0 +1,14 @@
+[Unit]
+Description=First boot setup for Tide Tracker
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=!/var/lib/tide-tracker-setup-complete
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/first-boot-setup.sh
+ExecStartPost=/usr/bin/touch /var/lib/tide-tracker-setup-complete
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
