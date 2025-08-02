@@ -1,0 +1,17 @@
+[Unit]
+Description=WiFi Connect Captive Portal
+Requires=NetworkManager.service
+After=NetworkManager.service
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/wifi-connect-loop.sh
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
