@@ -16,5 +16,4 @@ echo "No internet connection detected, starting WiFi Connect captive portal..."
 exec /usr/local/sbin/wifi-connect \
     --portal-ssid "TideTracker-Setup" \
     --portal-passphrase "pi-tides" \
-    --timeout 30 \
     --activity-timeout 600
