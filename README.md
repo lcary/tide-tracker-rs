@@ -154,6 +154,6 @@ valgrind --leak-check=full ./target/release/tide-tracker --stdout
 - [x] Test Pi device restart resilience
 - [x] Build and install in frame
 - [x] Optimization using SPI
-- [ ] Wifi connect with balena OS
+- [x] Wifi connect with balena OS
 - [ ] Show high/low times
 - [ ] Support automatic config creation w/ location check
