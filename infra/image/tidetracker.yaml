@@ -1,0 +1,20 @@
+image: rpi-bookworm-arm64
+
+include:
+  - rpi-bookworm-arm64.yaml
+
+packages:
+  - network-manager
+  - busybox
+
+customize:
+  - run: |
+      # Disable dhcpcd to avoid conflicts with NetworkManager
+      systemctl disable dhcpcd.service || true
+      
+      # Enable NetworkManager and wifi-portal service
+      systemctl enable NetworkManager.service
+      systemctl enable wifi-portal.service
+      
+      # Configure rfkill permissions for NetworkManager
+      usermod -a -G netdev nm-openconnect || true

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Tide Tracker Wi-Fi Setup</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; margin-top: 2em; }
+    .input { margin: 0.5em; font-size: 1em; }
+    .btn { font-size: 1em; padding: 0.5em 1em; }
+  </style>
+</head>
+<body>
+  <h1>Configure Wi-Fi for your Tide Tracker</h1>
+  <p>Please enter your Wi-Fi network name (SSID) and password:</p>
+  <form action="/cgi-bin/wifi-connect.sh" method="POST">
+    <input class="input" type="text" name="ssid" placeholder="Wi-Fi SSID" required /><br/>
+    <input class="input" type="password" name="psk" placeholder="Password" /><br/>
+    <button class="btn" type="submit">Connect</button>
+  </form>
+  <p style="font-size:0.9em;color:gray;">Note: If your network has no password, leave it blank. The device will reboot or exit setup once connected.</p>
+</body>
+</html>

@@ -39,6 +39,30 @@ curl -LsSf https://raw.githubusercontent.com/lcary/tide-tracker-rs/main/install.
 Note that this command runs sudo. If you are not comfortable with that and want to run each step yourself, or
 for more information on installing the tide tracker, see: [INSTALLATION.md](./docs/INSTALLATION.md)
 
+## Wi-Fi Setup
+
+The Tide Tracker includes a minimal captive portal for easy Wi-Fi configuration on headless devices. When no internet connection is detected, it automatically creates a "TideTracker-Setup" hotspot for configuration.
+
+### Installation
+```bash
+sudo ./scripts/wifi-portal-setup.sh
+```
+
+### Usage
+- **Automatic**: Service runs on boot, activates portal when offline
+- **Connect**: Look for "TideTracker-Setup" network (password: "pi-tides")
+- **Configure**: Your device should show a captive portal page automatically
+- **Monitor**: `journalctl -u wifi-portal.service -f`
+- **Update**: `sudo ./scripts/wifi-portal-update.sh` (updates portal scripts only)
+
+### How it works
+1. On boot, waits 30 seconds for existing Wi-Fi connection
+2. If no connection: starts AP mode on wlan0 with SSID "TideTracker-Setup"
+3. Serves captive portal web page on 192.168.4.1
+4. User submits Wi-Fi credentials via web form
+5. Device connects to target network and disables portal
+6. Normal operation resumes on the new Wi-Fi network
+
 ## User Manual
 
 The general user manual still needs to be written.
@@ -73,11 +97,18 @@ src/
     └── data_tests.rs # Unit tests
 
 scripts/
-├── wifi-setup.sh         # WiFi Connect installation script
-├── wifi-update.sh        # WiFi Connect update script
-├── wifi-connect-loop.sh  # Connectivity monitoring script
+├── wifi-portal-setup.sh     # Minimal captive portal installation script
+├── wifi-portal-update.sh    # Portal update script
+├── wifi-portal.sh           # Main portal service script
+├── portal-web/              # Captive portal web content
+│   ├── index.html           # Portal configuration page
+│   └── cgi-bin/
+│       └── wifi-connect.sh  # CGI handler for Wi-Fi credentials
+├── nm-config/               # NetworkManager configuration
+│   ├── dns.conf             # DNS config for captive portal
+│   └── captive.conf         # DNS wildcard redirect
 └── systemd/
-    └── wifi-connect.service # Systemd service definition
+    └── wifi-portal.service  # Systemd service definition
 
 infra/
 └── image/           # Docker-based Pi image building
