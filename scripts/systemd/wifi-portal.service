@@ -6,7 +6,7 @@ After=network.target NetworkManager.service
 [Service]
 Type=simple
 ExecStart=/usr/local/sbin/wifi-portal.sh 
-RemainAfterExit=yes
+Restart=no
 # The script runs until Wi-Fi connects successfully, then exits.
 
 [Install]
