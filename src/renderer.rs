@@ -140,8 +140,22 @@ pub fn draw_ascii(series: &TideSeries) {
         }
     }
 
+    // OFFLINE means the synthetic, station-unaligned fallback model is in
+    // use; CACHED means real station predictions are being shown from a
+    // cache because a live NOAA fetch failed. See TideSeries's doc comments
+    // in lib.rs for why these are distinct. Only surface a CACHED notice
+    // once the cache is old enough to matter (>= 1h) so a routine sub-hour
+    // cache hit doesn't add clutter.
     if series.offline {
         println!("⚠ OFFLINE\n");
+    } else if let Some(hours) = series.stale_hours {
+        if hours >= 1.0 {
+            if hours < 48.0 {
+                println!("⚠ CACHED {}h\n", hours.round() as i64);
+            } else {
+                println!("⚠ CACHED {}d\n", (hours / 24.0).floor() as i64);
+            }
+        }
     }
 
     for row in grid {

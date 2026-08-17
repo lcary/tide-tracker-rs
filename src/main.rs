@@ -114,7 +114,15 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
     // New API: pass epd, display_buffer, tide_series
     renderer.render_chart(&mut epd, &mut display_buffer, tide_series);
 
-    // --- Draw OFFLINE notice if needed ---
+    // --- Draw OFFLINE / CACHED notice if needed ---
+    //
+    // These two cases are deliberately distinguished (see TideSeries doc
+    // comments in lib.rs): OFFLINE means the synthetic, station-unaligned
+    // fallback model is being shown, while CACHED means real, correct
+    // station predictions are being shown from a cache because a live NOAA
+    // fetch failed - a much less alarming situation that still deserves a
+    // small, honest indicator rather than silently looking identical to a
+    // fresh fetch.
     if tide_series.offline {
         use embedded_graphics::mono_font::iso_8859_1::FONT_10X20;
         use embedded_graphics::{
@@ -124,6 +132,25 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
         Text::new("OFFLINE!", Point::new(10, 24), style)
             .draw(&mut display_buffer)
             .ok();
+    } else if let Some(hours) = tide_series.stale_hours {
+        // Only bother the display for a cache old enough to matter - a
+        // routine sub-hour cache hit (well within REFRESH_AFTER_HOURS) adds
+        // no clutter.
+        if hours >= 1.0 {
+            use embedded_graphics::mono_font::iso_8859_1::FONT_10X20;
+            use embedded_graphics::{
+                mono_font::MonoTextStyle, pixelcolor::BinaryColor, prelude::*, text::Text,
+            };
+            let label = if hours < 48.0 {
+                format!("CACHED {}h", hours.round() as i64)
+            } else {
+                format!("CACHED {}d", (hours / 24.0).floor() as i64)
+            };
+            let style = MonoTextStyle::new(&FONT_10X20, BinaryColor::On);
+            Text::new(&label, Point::new(10, 24), style)
+                .draw(&mut display_buffer)
+                .ok();
+        }
     }
 
     // Overlay the last update time/date using embedded-graphics Text primitive
@@ -245,9 +272,19 @@ fn main() -> anyhow::Result<()> {
     } else {
         rt.block_on(async {
             tide_data::fetch().await.unwrap_or_else(|error| {
-                // Log fetch failure for debugging (visible in systemd journal)
-                eprintln!("Tide data fetch failed: {}", error);
-                eprintln!("Falling back to offline mathematical model");
+                // tide_data::fetch() only returns Err here when *both* a live
+                // NOAA fetch failed *and* no cached predictions cover the
+                // current display window (it otherwise transparently serves
+                // a usable cache - see its doc comment). Reaching this point
+                // means the display is about to show a synthetic curve that
+                // is NOT aligned to any real station, so make that loud and
+                // unmistakable in the logs.
+                let config = Config::load();
+                eprintln!(
+                    "⚠️  DEGRADED: no live NOAA data and no usable cache — displaying SYNTHETIC \
+                     tide curve, which is NOT aligned to station {}: {}",
+                    config.station.id, error
+                );
                 // Continue with synthetic data rather than crashing
                 fallback::approximate(None)
             })
