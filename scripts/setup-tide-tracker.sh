@@ -94,6 +94,13 @@ if [[ $UPDATE_BINARY -eq 0 && $UPDATE_CONFIG -eq 0 ]]; then
 Description=Tide Tracker e-paper display update
 After=network-online.target
 Wants=network-online.target
+# This board (Pi Zero 2 W) has no RTC (no /dev/rtc*); at boot the clock is
+# only a restored fake-hwclock/timesyncd guess until NTP corrects it. The
+# tide chart is centred entirely on "now", so rendering before the clock is
+# right would draw the wrong time window. Wait for time-sync.target so the
+# clock is actually correct before the first run.
+After=time-sync.target
+Wants=time-sync.target
 
 [Service]
 Type=oneshot
@@ -153,10 +160,18 @@ EOF
   ### ──────────────────────────
   ### 3. Midnight full-refresh timer
   ### ──────────────────────────
-  if [[ ! -f "$FULL_REFRESH_SVC" ]]; then
+  # Always recreate these two, like tide-tracker.service above. They were
+  # previously only written when absent, which meant any later fix to them
+  # (such as the time-sync dependency below) silently never reached an
+  # existing install.
 cat <<EOF >"$FULL_REFRESH_SVC"
 [Unit]
 Description=Full e-paper refresh at midnight
+# No RTC on this board; wait for the clock to be NTP-corrected before
+# drawing, since the chart is centred on the current time (see
+# tide-tracker.service for the full explanation).
+After=time-sync.target
+Wants=time-sync.target
 
 [Service]
 Type=oneshot
@@ -164,9 +179,7 @@ ExecStart=$BIN_DEST --full-refresh
 WorkingDirectory=$CFG_DIR
 User=$SERVICE_USER
 EOF
-  fi
 
-  if [[ ! -f "$FULL_REFRESH_TIMER" ]]; then
 cat <<EOF >"$FULL_REFRESH_TIMER"
 [Unit]
 Description=Timer that triggers midnight e-paper refresh
@@ -179,9 +192,9 @@ Unit=$(basename "$FULL_REFRESH_SVC")
 [Install]
 WantedBy=timers.target
 EOF
-    systemctl daemon-reload
-    systemctl enable tide-midnight-refresh.timer
-  fi
+
+  systemctl daemon-reload
+  systemctl enable tide-midnight-refresh.timer
 
   ### ──────────────────────────
   ### 4. Hardware watchdog

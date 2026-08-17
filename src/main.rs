@@ -49,7 +49,11 @@ fn gpio_to_pin(gpio: u32) -> u32 {
 /// - Older modules use BUSY active LOW (flag=0)  
 /// - The code automatically forces flag=1 for newer modules to prevent hanging
 #[cfg(all(target_os = "linux", feature = "hardware"))]
-fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow::Result<()> {
+fn initialize_eink_display(
+    tide_series: &TideSeries,
+    config: &Config,
+    full_refresh: bool,
+) -> anyhow::Result<()> {
     use tide_clock_lib::epd4in2b_v2::{DisplayBuffer, Epd4in2bV2};
 
     eprintln!("🚀 Initializing GPIO-only e-ink display (SPI disabled mode)...");
@@ -105,10 +109,25 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
 
     eprintln!("📊 CHART MODE: Rendering tide chart...");
 
-    // First, clear the display to remove any previous content (like alternating stripes)
-    eprintln!("🧹 Clearing display to remove previous content...");
-    epd.clear()?;
-    eprintln!("✅ Display cleared successfully");
+    // A full clear-then-draw cycle flashes the panel through its inversion
+    // sequence, which clears accumulated ghosting - but it's only needed
+    // periodically, not on every update. This function runs 144x/day from
+    // the 10-minute timer, and once/day (at midnight) from the dedicated
+    // full-refresh timer, which passes `--full-refresh`. Clearing on every
+    // one of those 144 runs would be visually noisy and adds unnecessary
+    // panel wear for no benefit, since epd.display() already writes the
+    // complete frame buffer on its own; the midnight run supplies the
+    // periodic full refresh instead.
+    if full_refresh {
+        // First, clear the display to remove any previous content (like alternating stripes)
+        eprintln!("🧹 Clearing display to remove previous content...");
+        epd.clear()?;
+        eprintln!("✅ Display cleared successfully");
+    } else {
+        eprintln!(
+            "📝 Incremental redraw (no clear) - ghosting is cleared by the daily full refresh"
+        );
+    }
 
     let renderer = tide_clock_lib::eink_renderer::EinkTideRenderer::new();
     // New API: pass epd, display_buffer, tide_series
@@ -222,8 +241,8 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
     eprintln!("📤 Updating e-ink display...");
     eprintln!("     ⚠️  This should be called EXACTLY ONCE to avoid flickering");
 
-    // Try the normal display method first since we cleared the display
-    eprintln!("     🎨 Trying normal display method after clear...");
+    // Try the normal display method first
+    eprintln!("     🎨 Trying normal display method...");
     match epd.display(display_buffer.black_buffer(), display_buffer.red_buffer()) {
         Ok(_) => {
             eprintln!("     ✅ Normal display method completed successfully");
@@ -254,12 +273,23 @@ fn initialize_eink_display(tide_series: &TideSeries, config: &Config) -> anyhow:
 }
 
 /// Main application entry point.
+///
+/// Supported flags:
+/// - `--stdout`: development mode, render to stdout (ASCII) instead of hardware.
+/// - `--test-offline`: force the synthetic offline fallback curve, for testing.
+/// - `--full-refresh`: do a full clear-then-draw cycle instead of an incremental
+///   redraw (see `initialize_eink_display`). Used by the midnight timer.
 fn main() -> anyhow::Result<()> {
     // Parse command line arguments
     // Development mode: render to stdout for testing without hardware
     let args: Vec<String> = env::args().collect();
     let development_mode = args.iter().any(|arg| arg == "--stdout");
     let test_offline_mode = args.iter().any(|arg| arg == "--test-offline");
+    // Only consumed by initialize_eink_display, which is compiled out on
+    // non-Linux and non-hardware builds - matches the #[allow(unused_imports)]
+    // pattern above for the same reason.
+    #[allow(unused_variables)]
+    let full_refresh = args.iter().any(|arg| arg == "--full-refresh");
 
     // Create Tokio runtime for async operations
     let rt = tokio::runtime::Runtime::new()?;
@@ -329,7 +359,7 @@ fn main() -> anyhow::Result<()> {
         );
 
         // Initialize e-ink display with configured GPIO pins
-        match initialize_eink_display(&tide_series, &config) {
+        match initialize_eink_display(&tide_series, &config, full_refresh) {
             Ok(_) => {
                 eprintln!("✅ E-ink display updated successfully");
             }
