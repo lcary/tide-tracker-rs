@@ -151,6 +151,45 @@ echo "  Verification (systemctl is-active watchdog):"
 systemctl is-active watchdog || true
 
 ### ──────────────────────────
+### 4. Make time-sync.target actually mean "clock is correct"
+### ──────────────────────────
+# This board has no RTC (no /dev/rtc*), so at boot the clock is only a restored
+# guess until NTP corrects it. tide-tracker.service declares
+# After=time-sync.target for exactly that reason - but on Debian
+# systemd-time-wait-sync.service ships DISABLED, which means time-sync.target is
+# reached immediately at boot and the dependency is inert. Measured on this box:
+# target reached at 11:29:30, actual NTP sync several seconds later, with
+# tide-tracker starting in between.
+#
+# Enabling the wait service makes the ordering real. The catch is that it waits
+# indefinitely, which on an appliance whose whole problem is flaky Wi-Fi would
+# mean a blank display during an outage - the opposite of what we want. So cap
+# it: wait up to 90s for a genuinely synchronized clock, then give up and let
+# boot continue. tide-tracker.timer's OnBootSec=2min sits outside that cap, so
+# in the normal case this costs nothing. tide-tracker uses Wants= rather than
+# Requires=, so a timeout here never prevents the display from updating - it
+# just means we drew with a slightly stale clock, which the next run corrects.
+echo "Making time-sync.target wait for a real clock..."
+
+TIMESYNC_DROPIN_DIR="/etc/systemd/system/systemd-time-wait-sync.service.d"
+mkdir -p "$TIMESYNC_DROPIN_DIR"
+cat <<'EOF' >"$TIMESYNC_DROPIN_DIR/99-bounded-wait.conf"
+[Unit]
+Description=Wait (at most 90s) until the kernel clock is NTP-synchronized
+
+[Service]
+# Never block boot indefinitely on a network that may be down.
+TimeoutStartSec=90
+EOF
+echo "  Wrote $TIMESYNC_DROPIN_DIR/99-bounded-wait.conf (TimeoutStartSec=90)"
+
+systemctl daemon-reload || true
+systemctl enable systemd-time-wait-sync.service || true
+
+echo "  Verification (systemd-time-wait-sync enabled):"
+systemctl is-enabled systemd-time-wait-sync.service || true
+
+### ──────────────────────────
 ### Summary
 ### ──────────────────────────
 echo ""
@@ -158,5 +197,7 @@ echo "✅ Hardening complete:"
 echo "  1. Wi-Fi power save disabled ($NM_POWERSAVE_CONF, plus runtime nmcli apply)."
 echo "  2. journald set to persistent storage with 50M/10M caps ($JOURNALD_DROPIN)."
 echo "  3. watchdog.conf now monitors /dev/watchdog with a 15s timeout / 5s interval."
+echo "  4. systemd-time-wait-sync enabled with a 90s cap, so time-sync.target"
+echo "     really means the clock is correct (it was reached instantly before)."
 echo ""
 echo "Note: Wi-Fi power save and journald persistence fully take effect after the next reboot."
