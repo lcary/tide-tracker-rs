@@ -125,18 +125,30 @@ pub struct TideSeries {
     /// orthogonal to `stale_hours`: synthetic data has no real "age" to
     /// report, so `stale_hours` is always `None` when `offline` is `true`.
     pub offline: bool,
-    /// Age in hours of the cached NOAA predictions backing this series, when
-    /// live data could not be fetched. `None` means the data is live (or, if
-    /// `offline` is set, that it is synthetic and has no real age).
-    ///
-    /// Unlike `offline`, a `Some` value here still means the tide curve is
-    /// astronomically correct - tide predictions don't go stale the way
-    /// weather does, so a multi-day-old cached prediction covering the
-    /// current display window is just as accurate as a live fetch. This
-    /// field exists purely so the UI can be transparent about *why* no
-    /// network request was made, not to warn that the data might be wrong.
+    /// Age in hours of the cached predictions backing this series, or `None`
+    /// when the data is live. Unlike `offline`, `Some` still means the curve
+    /// is correct - predictions are astronomy, so a cached one covering the
+    /// window is as accurate as a fresh fetch.
     #[serde(default)]
     pub stale_hours: Option<f32>,
+}
+
+impl TideSeries {
+    /// Short label describing the data source, or `None` when it is live and
+    /// fresh and therefore needs no annotation.
+    ///
+    /// Shared by both renderers so the wording and the staleness thresholds
+    /// cannot drift apart. A sub-hour cache hit is routine, so it stays quiet.
+    pub fn status_label(&self) -> Option<String> {
+        if self.offline {
+            return Some("OFFLINE!".to_string());
+        }
+        match self.stale_hours {
+            Some(h) if h >= 48.0 => Some(format!("CACHED {}d", (h / 24.0).floor() as i64)),
+            Some(h) if h >= 1.0 => Some(format!("CACHED {}h", h.round() as i64)),
+            _ => None,
+        }
+    }
 }
 
 // Custom EPD module for hardware rendering (already declared above)

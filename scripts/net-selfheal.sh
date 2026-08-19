@@ -34,19 +34,17 @@ STATE_DIR="/run/tide-tracker"
 STATE_FILE="$STATE_DIR/net-failures"
 mkdir -p "$STATE_DIR"
 
-# The real upstream the app actually depends on. Used as the last, most
-# meaningful check: pings can succeed while NOAA (or DNS, or TLS) is broken.
 NOAA_URL="https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=predictions&station=8418150&date=today&datum=MLLW&time_zone=lst_ldt&units=english&format=json"
 
 ### ──────────────────────────
 ### Connectivity check
 ### ──────────────────────────
-# UP if ANY of these succeed, checked cheapest-first so a healthy box exits
-# fast without ever hitting the network. The NOAA call is quoted so the shell
-# doesn't treat the unescaped `&` in the query string as a background job.
+# UP if either succeeds, cheapest first so a healthy box exits fast. The NOAA
+# call is the one that actually matters (a ping can pass while DNS, TLS, or the
+# upstream is broken) and is quoted so the shell doesn't treat the `&` in the
+# query string as a background job.
 check_connectivity() {
     ping -c 2 -W 5 1.1.1.1 &>/dev/null && return 0
-    ping -c 2 -W 5 8.8.8.8 &>/dev/null && return 0
     curl -sf --max-time 15 -o /dev/null "$NOAA_URL" && return 0
     return 1
 }
@@ -106,11 +104,7 @@ rung_reload_driver() {
         sleep 2
         waited=$((waited + 2))
     done
-    if [[ -e "/sys/class/net/$WIFI_IFACE" ]]; then
-        echo "  -> $WIFI_IFACE reappeared after ${waited}s"
-    else
-        echo "  -> WARNING: $WIFI_IFACE did not reappear within ${waited}s"
-    fi
+    echo "  -> waited ${waited}s for $WIFI_IFACE (present: $([[ -e "/sys/class/net/$WIFI_IFACE" ]] && echo yes || echo NO))"
 
     # NetworkManager needs a kick after the driver comes back so it notices
     # the (re-created) interface and re-activates the saved profile on it.

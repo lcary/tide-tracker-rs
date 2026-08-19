@@ -56,10 +56,9 @@
 //!
 //! ### This implementation
 //! - **Location**: see [`cache_path`] - `$TIDE_CACHE_DIR`, then `$STATE_DIRECTORY`
-//!   (systemd's `StateDirectory=` mechanism), then `/var/lib/tide-tracker`, then `/tmp`
-//!   as a last resort. Any of these persists across `PrivateTmp` oneshot invocations
-//!   except the final `/tmp` fallback, which only matters if none of the durable
-//!   locations are writable.
+//!   (systemd's `StateDirectory=` mechanism), then `/var/lib/tide-tracker`
+//!   as a last resort. All of these persist across `PrivateTmp` oneshot invocations,
+//!   which is exactly what the old `/tmp` cache did not.
 //! - **Format**: raw hilo points with absolute unix-second timestamps (not the derived
 //!   grid), plus the station ID they belong to and when they were fetched - see
 //!   [`CachedPredictions`]. Storing absolute time means the same cache file remains
@@ -168,10 +167,8 @@ const REFRESH_AFTER_HOURS: i64 = 6;
 ///    `/tmp`-based cache lacked.
 /// 3. `/var/lib/tide-tracker` - same path systemd would use, so behavior is
 ///    consistent even when run manually outside the unit.
-/// 4. `/tmp` - last resort, only reached if nothing durable is writable
-///    (e.g. running unprivileged outside systemd without `$TIDE_CACHE_DIR`).
 fn cache_dir_candidates() -> Vec<PathBuf> {
-    let mut candidates = Vec::with_capacity(4);
+    let mut candidates = Vec::with_capacity(3);
     if let Ok(dir) = env::var("TIDE_CACHE_DIR") {
         candidates.push(PathBuf::from(dir));
     }
@@ -179,13 +176,12 @@ fn cache_dir_candidates() -> Vec<PathBuf> {
         candidates.push(PathBuf::from(dir));
     }
     candidates.push(PathBuf::from("/var/lib/tide-tracker"));
-    candidates.push(PathBuf::from("/tmp"));
     candidates
 }
 
 /// Resolve the full cache file path, falling through candidate directories
 /// (see [`cache_dir_candidates`]) until one can be created. Returns `None`
-/// only if every candidate, including `/tmp`, is unwritable.
+/// only if no candidate directory is writable.
 fn cache_path() -> Option<PathBuf> {
     cache_dir_candidates()
         .into_iter()
@@ -457,7 +453,7 @@ fn save_cache(
 /// product=predictions&station=8418150&begin_date=20240615&end_date=20240624&
 /// datum=MLLW&time_zone=lst_ldt&units=english&format=json&interval=hilo
 /// ```
-pub async fn fetch_points(config: &Config) -> Result<Vec<(DateTime<Local>, f32)>, TideError> {
+async fn fetch_points(config: &Config) -> Result<Vec<(DateTime<Local>, f32)>, TideError> {
     // Calculate date range: yesterday through 7 days from now. See the
     // "Why yesterday through +7 days" doc section above for the rationale.
     let now = Local::now();
@@ -608,41 +604,32 @@ fn series_from_points(
 /// Timestamps outside the range covered by `points` are clamped to the
 /// nearest endpoint's height rather than extrapolated, since extrapolating
 /// a cosine curve past its defining points produces meaningless values.
-fn interpolate_hilo(points: &[(chrono::DateTime<Local>, f32)], ts: chrono::DateTime<Local>) -> f32 {
+fn interpolate_hilo(points: &[(DateTime<Local>, f32)], ts: DateTime<Local>) -> f32 {
     use std::f64::consts::PI;
 
-    // Clamp to the first/last point rather than interpolating between them
-    // directly - that fallback would otherwise blend two arbitrary, possibly
-    // far-apart points into a meaningless value.
-    if ts <= points[0].0 {
+    // Index of the first point at or after `ts`. Clamp outside the data range
+    // rather than extrapolating: beyond the ends we have no information, and
+    // blending the first and last point would invent a meaningless curve.
+    let i = points.partition_point(|&(t, _)| t < ts);
+    if i == 0 {
         return points[0].1;
     }
-    if ts >= points[points.len() - 1].0 {
+    if i == points.len() {
         return points[points.len() - 1].1;
     }
 
-    // Find the bracketing pair. Guaranteed to exist: ts is strictly between
-    // the first and last point's times, checked above.
-    let Some(window) = points.windows(2).find(|w| w[0].0 <= ts && ts <= w[1].0) else {
-        return points[points.len() - 1].1;
-    };
-    let (t0, h0) = window[0];
-    let (t1, h1) = window[1];
+    let (t0, h0) = points[i - 1];
+    let (t1, h1) = points[i];
 
-    let duration_secs = (t1 - t0).num_milliseconds() as f64 / 1000.0;
-    if duration_secs <= 0.0 {
+    let span = (t1 - t0).num_seconds() as f64;
+    if span <= 0.0 {
         // Duplicated (or out-of-order) timestamp: avoid dividing by zero.
         return h0;
     }
+    let f = ((ts - t0).num_seconds() as f64 / span).clamp(0.0, 1.0);
 
-    let elapsed_secs = (ts - t0).num_milliseconds() as f64 / 1000.0;
-    let f = (elapsed_secs / duration_secs).clamp(0.0, 1.0);
-
-    let h0 = h0 as f64;
-    let h1 = h1 as f64;
-    let height = (h0 + h1) / 2.0 - (h1 - h0) / 2.0 * (PI * f).cos();
-
-    height as f32
+    let (h0, h1) = (h0 as f64, h1 as f64);
+    ((h0 + h1) / 2.0 - (h1 - h0) / 2.0 * (PI * f).cos()) as f32
 }
 
 #[cfg(test)]
@@ -776,7 +763,7 @@ mod tests {
     #[test]
     fn durable_cache_roundtrip_preserves_points() {
         // Point TIDE_CACHE_DIR at a scratch directory so this test never
-        // touches a real cache location (/var/lib/tide-tracker, /tmp, ...).
+        // touches the real cache location (/var/lib/tide-tracker).
         let temp_dir = TempDir::new().unwrap();
         env::set_var("TIDE_CACHE_DIR", temp_dir.path());
 

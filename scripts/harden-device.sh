@@ -2,10 +2,12 @@
 set -euo pipefail
 
 # Hardening script for a Raspberry Pi Zero 2 W running the tide-tracker appliance.
-# Fixes three field-observed reliability issues:
+# Fixes the field-observed reliability issues:
 #   1. Wi-Fi silently dropping off the network after days-to-weeks (brcmfmac power save).
 #   2. Logs vanishing on reboot (journald Storage=volatile), losing evidence of failures.
 #   3. The hardware watchdog running but not actually monitoring anything.
+#   4. time-sync.target being reached before the clock is actually correct.
+#   5. No automatic recovery when the link wedges anyway (installs net-selfheal).
 #
 # Safe to re-run: every step below checks current state before changing it.
 
@@ -16,6 +18,8 @@ if [[ "$(id -u)" -ne 0 ]]; then
     echo "This script must be run as root. Re-running with sudo..."
     exec sudo -E bash "$0" "$@"
 fi
+
+SCRIPT_DIR="$(realpath "$(dirname "${BASH_SOURCE[0]}")")"
 
 ### ──────────────────────────
 ### 1. Disable Wi-Fi power save
@@ -190,6 +194,24 @@ echo "  Verification (systemd-time-wait-sync enabled):"
 systemctl is-enabled systemd-time-wait-sync.service || true
 
 ### ──────────────────────────
+### 5. Escalating network self-heal
+### ──────────────────────────
+# Power save being off should prevent most dropouts, but it is a prevention,
+# not a guarantee. net-selfheal walks a ladder of increasingly aggressive
+# recovery steps (reconnect, restart NetworkManager, reload brcmfmac, and only
+# then reboot) so a wedged link fixes itself instead of waiting for someone to
+# pull the power.
+echo "Installing network self-heal service..."
+install -Dm755 "$SCRIPT_DIR/net-selfheal.sh" /usr/local/bin/net-selfheal.sh
+install -Dm644 "$SCRIPT_DIR/systemd/net-selfheal.service" /etc/systemd/system/net-selfheal.service
+install -Dm644 "$SCRIPT_DIR/systemd/net-selfheal.timer" /etc/systemd/system/net-selfheal.timer
+systemctl daemon-reload || true
+systemctl enable --now net-selfheal.timer || true
+
+echo "  Verification (net-selfheal.timer):"
+systemctl is-active net-selfheal.timer || true
+
+### ──────────────────────────
 ### Summary
 ### ──────────────────────────
 echo ""
@@ -199,5 +221,7 @@ echo "  2. journald set to persistent storage with 50M/10M caps ($JOURNALD_DROPI
 echo "  3. watchdog.conf now monitors /dev/watchdog with a 15s timeout / 5s interval."
 echo "  4. systemd-time-wait-sync enabled with a 90s cap, so time-sync.target"
 echo "     really means the clock is correct (it was reached instantly before)."
+echo "  5. net-selfheal timer installed (escalating Wi-Fi recovery)."
+echo "     Watch it with: journalctl -u net-selfheal -f"
 echo ""
 echo "Note: Wi-Fi power save and journald persistence fully take effect after the next reboot."

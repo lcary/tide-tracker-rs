@@ -52,11 +52,8 @@ bash ./scripts/setup-tide-tracker.sh \
 # volatile logs meant those failures left no evidence. harden-device.sh fixes
 # both (plus the watchdog); net-selfheal recovers the link automatically
 # instead of waiting for someone to pull the power.
-echo "Applying device hardening (Wi-Fi power save, persistent logs, watchdog)"
+echo "Applying device hardening (Wi-Fi power save, persistent logs, watchdog, self-heal)"
 bash ./scripts/harden-device.sh
-
-echo "Installing network self-heal service"
-bash ./scripts/install-net-selfheal.sh
 
 # ---------------------------------------------------------------------
 # 5. Fin

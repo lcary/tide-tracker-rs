@@ -133,43 +133,19 @@ fn initialize_eink_display(
     // New API: pass epd, display_buffer, tide_series
     renderer.render_chart(&mut epd, &mut display_buffer, tide_series);
 
-    // --- Draw OFFLINE / CACHED notice if needed ---
-    //
-    // These two cases are deliberately distinguished (see TideSeries doc
-    // comments in lib.rs): OFFLINE means the synthetic, station-unaligned
-    // fallback model is being shown, while CACHED means real, correct
-    // station predictions are being shown from a cache because a live NOAA
-    // fetch failed - a much less alarming situation that still deserves a
-    // small, honest indicator rather than silently looking identical to a
-    // fresh fetch.
-    if tide_series.offline {
+    // One label covers both cases (see TideSeries::status_label): OFFLINE! for
+    // the synthetic, station-unaligned fallback, CACHED Nh/Nd for real station
+    // predictions served from cache after a failed live fetch. A fresh fetch
+    // gets no annotation at all.
+    if let Some(label) = tide_series.status_label() {
         use embedded_graphics::mono_font::iso_8859_1::FONT_10X20;
         use embedded_graphics::{
             mono_font::MonoTextStyle, pixelcolor::BinaryColor, prelude::*, text::Text,
         };
         let style = MonoTextStyle::new(&FONT_10X20, BinaryColor::On);
-        Text::new("OFFLINE!", Point::new(10, 24), style)
+        Text::new(&label, Point::new(10, 24), style)
             .draw(&mut display_buffer)
             .ok();
-    } else if let Some(hours) = tide_series.stale_hours {
-        // Only bother the display for a cache old enough to matter - a
-        // routine sub-hour cache hit (well within REFRESH_AFTER_HOURS) adds
-        // no clutter.
-        if hours >= 1.0 {
-            use embedded_graphics::mono_font::iso_8859_1::FONT_10X20;
-            use embedded_graphics::{
-                mono_font::MonoTextStyle, pixelcolor::BinaryColor, prelude::*, text::Text,
-            };
-            let label = if hours < 48.0 {
-                format!("CACHED {}h", hours.round() as i64)
-            } else {
-                format!("CACHED {}d", (hours / 24.0).floor() as i64)
-            };
-            let style = MonoTextStyle::new(&FONT_10X20, BinaryColor::On);
-            Text::new(&label, Point::new(10, 24), style)
-                .draw(&mut display_buffer)
-                .ok();
-        }
     }
 
     // Overlay the last update time/date using embedded-graphics Text primitive
