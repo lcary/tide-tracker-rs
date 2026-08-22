@@ -140,8 +140,10 @@ pub fn draw_ascii(series: &TideSeries) {
         }
     }
 
-    if series.offline {
-        println!("⚠ OFFLINE\n");
+    // Same label as the e-ink renderer, so the wording and the staleness
+    // thresholds cannot drift apart between the two outputs.
+    if let Some(label) = series.status_label() {
+        println!("⚠ {}\n", label.trim_end_matches('!'));
     }
 
     for row in grid {

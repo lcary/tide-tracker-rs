@@ -5,7 +5,7 @@
 #
 # Some common stations:
 # 8418150 - Portland, ME (default)
-# 8410140 - Boston Harbor, MA  
+# 8410140 - Boston Harbor, MA
 # 8443970 - Boston, MA
 # 8447930 - Bar Harbor, ME
 # 8413320 - Bar Harbor, Frenchman Bay, ME
@@ -13,6 +13,16 @@
 # 8461490 - New London, CT
 # 8516945 - Kings Point, NY
 # 8518750 - The Battery, NY
+#
+# Subordinate stations (type S) work too - predictions now use interval=hilo,
+# which both reference and subordinate stations support. Pick the station for
+# the water you actually look at: river/upper-estuary stations can lag
+# open-coast stations by hours, so a nearby-looking station ID can still be
+# badly wrong for timing.
+# 8418150 - Portland, ME (default; correct for Casco Bay)
+# 8417553 - Wilson Cove, Casco Bay, ME  (low tide within ~2 min of Portland)
+# 8417367 - Howard Pt., New Meadows R., ME  (~1 min of Portland)
+# 8417527 - Brunswick, Androscoggin R., ME  (low tide +4h36m vs Portland!)
 
 [station]
 # NOAA station ID for tide predictions

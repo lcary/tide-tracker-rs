@@ -94,6 +94,13 @@ if [[ $UPDATE_BINARY -eq 0 && $UPDATE_CONFIG -eq 0 ]]; then
 Description=Tide Tracker e-paper display update
 After=network-online.target
 Wants=network-online.target
+# This board (Pi Zero 2 W) has no RTC (no /dev/rtc*); at boot the clock is
+# only a restored fake-hwclock/timesyncd guess until NTP corrects it. The
+# tide chart is centred entirely on "now", so rendering before the clock is
+# right would draw the wrong time window. Wait for time-sync.target so the
+# clock is actually correct before the first run.
+After=time-sync.target
+Wants=time-sync.target
 
 [Service]
 Type=oneshot
@@ -110,10 +117,23 @@ SyslogIdentifier=tide-tracker
 # Allow GPIO access
 SupplementaryGroups=gpio spi
 
+# Durable, per-service storage for the tide prediction cache. systemd
+# creates /var/lib/tide-tracker (owned by $SERVICE_USER) before each start
+# and exports its path via \$STATE_DIRECTORY, which is where
+# tide_data::fetch() persists cached predictions. This directory survives
+# across invocations even with PrivateTmp=true below, unlike /tmp.
+# (\$STATE_DIRECTORY is escaped: this heredoc is unquoted so that
+# \$SERVICE_USER and \$BIN_DEST expand, and set -u would abort on an
+# unexpanded systemd-provided variable.)
+StateDirectory=tide-tracker
+
 # Security (but allow GPIO access)
 NoNewPrivileges=false
 ProtectSystem=false
 ProtectHome=true
+# Safe to keep: the prediction cache now lives under \$STATE_DIRECTORY
+# (/var/lib/tide-tracker), not /tmp, so a fresh private /tmp per oneshot
+# invocation no longer defeats caching.
 PrivateTmp=true
 EOF
 
@@ -140,10 +160,18 @@ EOF
   ### ──────────────────────────
   ### 3. Midnight full-refresh timer
   ### ──────────────────────────
-  if [[ ! -f "$FULL_REFRESH_SVC" ]]; then
+  # Always recreate these two, like tide-tracker.service above. They were
+  # previously only written when absent, which meant any later fix to them
+  # (such as the time-sync dependency below) silently never reached an
+  # existing install.
 cat <<EOF >"$FULL_REFRESH_SVC"
 [Unit]
 Description=Full e-paper refresh at midnight
+# No RTC on this board; wait for the clock to be NTP-corrected before
+# drawing, since the chart is centred on the current time (see
+# tide-tracker.service for the full explanation).
+After=time-sync.target
+Wants=time-sync.target
 
 [Service]
 Type=oneshot
@@ -151,9 +179,7 @@ ExecStart=$BIN_DEST --full-refresh
 WorkingDirectory=$CFG_DIR
 User=$SERVICE_USER
 EOF
-  fi
 
-  if [[ ! -f "$FULL_REFRESH_TIMER" ]]; then
 cat <<EOF >"$FULL_REFRESH_TIMER"
 [Unit]
 Description=Timer that triggers midnight e-paper refresh
@@ -166,16 +192,32 @@ Unit=$(basename "$FULL_REFRESH_SVC")
 [Install]
 WantedBy=timers.target
 EOF
-    systemctl daemon-reload
-    systemctl enable tide-midnight-refresh.timer
-  fi
+
+  systemctl daemon-reload
+  systemctl enable tide-midnight-refresh.timer
 
   ### ──────────────────────────
   ### 4. Hardware watchdog
   ### ──────────────────────────
-  if ! grep -q '^dtparam=watchdog=on' /boot/config.txt; then
-    echo 'Enabling BCM watchdog…'
-    echo 'dtparam=watchdog=on' >> /boot/config.txt
+  # Raspberry Pi OS Bookworm moved the boot config to /boot/firmware/config.txt;
+  # /boot/config.txt no longer exists there (older releases still use it).
+  # Prefer the Bookworm path, fall back to the legacy path, and skip this
+  # step entirely rather than creating a stray file if neither is present.
+  if [[ -f /boot/firmware/config.txt ]]; then
+    BOOT_CONFIG=/boot/firmware/config.txt
+  elif [[ -f /boot/config.txt ]]; then
+    BOOT_CONFIG=/boot/config.txt
+  else
+    BOOT_CONFIG=""
+  fi
+
+  if [[ -n "$BOOT_CONFIG" ]]; then
+    if ! grep -q '^dtparam=watchdog=on' "$BOOT_CONFIG"; then
+      echo 'Enabling BCM watchdog…'
+      echo 'dtparam=watchdog=on' >> "$BOOT_CONFIG"
+    fi
+  else
+    echo 'Warning: could not find /boot/firmware/config.txt or /boot/config.txt - skipping watchdog dtparam setup.'
   fi
 
   if ! dpkg -s watchdog &>/dev/null; then
@@ -200,7 +242,17 @@ EOF
   ### 6. Finish
   ### ──────────────────────────
   echo '✅  Tide Tracker system services installed.'
-  echo '   → Reboot now? (y/N)'
-  read -r reply
-  [[ "$reply" =~ ^[Yy]$ ]] && reboot
+  # Only prompt interactively when stdin is a real TTY; otherwise (e.g. when
+  # this script is piped in non-interactively, or run from another script)
+  # reading from stdin would hang or immediately fail, making the installer
+  # unusable. Non-interactive runs just get told a reboot may be needed and
+  # exit successfully rather than being blocked.
+  if [[ -t 0 ]]; then
+    echo '   → Reboot now? (y/N)'
+    read -r reply
+    [[ "$reply" =~ ^[Yy]$ ]] && reboot
+  else
+    echo '   → Non-interactive session detected: skipping reboot prompt.'
+    echo '   → A reboot may be needed for the watchdog/overlay changes to take effect.'
+  fi
 fi

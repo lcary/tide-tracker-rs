@@ -1,0 +1,11 @@
+[Unit]
+Description=Run network self-heal check every 5 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=net-selfheal.service
+
+[Install]
+WantedBy=timers.target

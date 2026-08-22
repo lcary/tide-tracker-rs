@@ -119,6 +119,7 @@ fn tide_series_handles_edge_cases() {
     let empty_series = TideSeries {
         samples: vec![],
         offline: true,
+        stale_hours: None,
     };
     assert_eq!(empty_series.samples.len(), 0);
 
@@ -129,6 +130,7 @@ fn tide_series_handles_edge_cases() {
             tide_ft: 5.0,
         }],
         offline: false,
+        stale_hours: None,
     };
     assert_eq!(single_sample_series.samples.len(), 1);
 
@@ -149,6 +151,7 @@ fn tide_series_handles_edge_cases() {
             }, // Very high tide
         ],
         offline: false,
+        stale_hours: None,
     };
 
     // Should handle extreme values without panicking
@@ -225,6 +228,7 @@ fn cache_operations_work_correctly() {
             },
         ],
         offline: false,
+        stale_hours: None,
     };
 
     // Test serialization

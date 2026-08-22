@@ -97,6 +97,9 @@ pub fn approximate(now: Option<DateTime<Utc>>) -> TideSeries {
     TideSeries {
         samples,
         offline: true,
+        // Synthetic data has no real fetch/cache age to report - `offline`
+        // alone conveys "this is not station data".
+        stale_hours: None,
     }
 }
 

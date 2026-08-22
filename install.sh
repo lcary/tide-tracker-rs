@@ -46,6 +46,16 @@ bash ./scripts/setup-tide-tracker.sh \
   --config "$CFG_FILE"
 
 # ---------------------------------------------------------------------
+# 4b. Reliability: stop the display going stale for weeks at a time
+# ---------------------------------------------------------------------
+# Wi-Fi power save wedges this board's brcmfmac chip after days-to-weeks, and
+# volatile logs meant those failures left no evidence. harden-device.sh fixes
+# both (plus the watchdog); net-selfheal recovers the link automatically
+# instead of waiting for someone to pull the power.
+echo "Applying device hardening (Wi-Fi power save, persistent logs, watchdog, self-heal)"
+bash ./scripts/harden-device.sh
+
+# ---------------------------------------------------------------------
 # 5. Fin
 # ---------------------------------------------------------------------
 echo "✅ Installation complete!"
